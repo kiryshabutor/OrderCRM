@@ -10,4 +10,3 @@ public:
     void save(const std::vector<Order>& data) override;
     std::vector<Order> load() override;
 };
-
