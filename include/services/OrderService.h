@@ -1,0 +1,37 @@
+#pragma once
+#include <map>
+#include <string>
+#include <algorithm>
+#include "include/core/Order.h"
+#include "include/core/IRepository.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/utils/SimpleList.h"
+
+class OrderService {
+private:
+    SimpleList<Order> data_;
+    std::map<std::string, double> price_;
+    int nextId_{1};
+    IRepository& repo_;
+public:
+    explicit OrderService(IRepository& repo) : repo_(repo) {}
+
+    void setPrices(std::map<std::string, double> p) { price_ = std::move(p); }
+    const std::map<std::string,double>& price() const { return price_; }
+
+    Order& create(const std::string& client);
+    void addItem(Order& o, const std::string& name, int qty);
+    void setStatus(Order& o, const std::string& s);
+
+    Order* findById(int id);
+    const Order* findById(int id) const;
+
+    void sortById();
+    double revenue() const;
+
+    void save();
+    void load();
+
+    const SimpleList<Order>& all() const { return data_; }
+    int& nextIdRef() { return nextId_; }
+};
