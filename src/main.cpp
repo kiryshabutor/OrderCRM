@@ -11,13 +11,19 @@
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
-    std::filesystem::path binDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
-    std::filesystem::path dbDir = binDir / ".." / "db";
-    std::filesystem::create_directories(dbDir);
-    std::filesystem::path ordersPath = dbDir / "orders.txt";
-    std::filesystem::path productsPath = dbDir / "products.txt";
+    std::filesystem::path appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+
+    std::filesystem::path dbDir       = appDir / "db";
+    std::filesystem::path ordersPath  = dbDir / "orders.txt";
+    std::filesystem::path productsPath= dbDir / "products.txt";
+    std::filesystem::path reportsDir  = appDir / "reports";
+
+    std::error_code ec;
+    std::filesystem::create_directories(dbDir, ec);
+    std::filesystem::create_directories(reportsDir, ec);
+
+    if (!std::filesystem::exists(ordersPath))   { std::ofstream(ordersPath.string()).close(); }
     if (!std::filesystem::exists(productsPath)) { std::ofstream(productsPath.string()).close(); }
-    if (!std::filesystem::exists(ordersPath)) { std::ofstream(ordersPath.string()).close(); }
 
     TxtOrderRepository orderRepo(ordersPath.string());
     TxtProductRepository productRepo(productsPath.string());

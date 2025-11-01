@@ -5,6 +5,7 @@
 #include "include/infrastructure/TxtProductRepository.h"
 #include "include/ui/AddOrderDialog.h"
 #include "include/ui/EditOrderDialog.h"
+#include "include/ui/ReportDialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -57,21 +58,12 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     auto* actionRow = new QHBoxLayout();
     addOrderBtn_ = new QPushButton("Add order", this);
     editOrderBtn_ = new QPushButton("Edit order", this);
+    reportBtn_ = new QPushButton("Report", this);
     actionRow->addWidget(addOrderBtn_);
     actionRow->addWidget(editOrderBtn_);
+    actionRow->addWidget(reportBtn_);
     actionRow->addStretch();
     left->addLayout(actionRow);
-
-    reportControls_ = new QWidget(this);
-    auto* reportLayout = new QHBoxLayout(reportControls_);
-    reportLayout->setContentsMargins(0,0,0,0);
-    reportNameEdit_ = new QLineEdit(this);
-    reportNameEdit_->setPlaceholderText("report name");
-    generateReportBtn_ = new QPushButton("Generate report", this);
-    reportLayout->addWidget(reportNameEdit_);
-    reportLayout->addWidget(generateReportBtn_);
-    left->addWidget(reportControls_);
-    reportControls_->setVisible(false);
 
     auto* right = new QVBoxLayout();
     productTable_ = new QTableWidget(this);
@@ -107,12 +99,12 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
 
     connect(addOrderBtn_, &QPushButton::clicked, this, &MainWindow::onAddOrder);
     connect(editOrderBtn_, &QPushButton::clicked, this, &MainWindow::onEditOrder);
+    connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onOpenReportDialog);
     connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
     connect(updateProductBtn_, &QPushButton::clicked, this, &MainWindow::onUpdateProduct);
     connect(removeProductBtn_, &QPushButton::clicked, this, &MainWindow::onRemoveProduct);
     connect(filterBtn_, &QPushButton::clicked, this, &MainWindow::onOpenFilter);
     connect(clearFilterBtn_, &QPushButton::clicked, this, &MainWindow::onClearFilter);
-    connect(generateReportBtn_, &QPushButton::clicked, this, &MainWindow::onGenerateReport);
 
     this->resize(1200, 560);
     refreshTable();
@@ -160,8 +152,8 @@ QList<const Order*> MainWindow::currentFilteredRows() const {
     return rows;
 }
 
-QString MainWindow::sanitizedReportBaseName() const {
-    QString base = reportNameEdit_ ? reportNameEdit_->text().trimmed() : QString();
+QString MainWindow::sanitizedBaseName(const QString& raw) {
+    QString base = raw.trimmed();
     if (base.isEmpty()) base = "Report";
     QString res;
     for (QChar ch : base) {
@@ -243,11 +235,9 @@ void MainWindow::refreshTable() {
     if (filterActive) {
         filterBtn_->setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;");
         titleLabel_->setText(QString("Filtered Table (%1 orders)").arg(foundCount));
-        reportControls_->setVisible(true);
     } else {
         filterBtn_->setStyleSheet("");
         titleLabel_->setText(QString("Main Table (%1 orders)").arg((int)svc_.all().size()));
-        reportControls_->setVisible(false);
     }
 
     table_->setSortingEnabled(!rows.isEmpty());
@@ -346,6 +336,98 @@ void MainWindow::onEditOrder() {
     refreshTable();
 }
 
+void MainWindow::onOpenReportDialog() {
+    bool filterActive = !activeClientFilter_.isEmpty() || !activeStatusFilter_.isEmpty()
+                        || !minTotalText_.isEmpty() || !maxTotalText_.isEmpty()
+                        || !minIdText_.isEmpty() || !maxIdText_.isEmpty()
+                        || useFrom_ || useTo_;
+    ReportDialog dlg(filterActive, this);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    QList<const Order*> rows = dlg.scopeFiltered() ? currentFilteredRows() : QList<const Order*>{};
+    if (!dlg.scopeFiltered()) {
+        for (const auto& o : svc_.all()) rows.push_back(&o);
+    }
+    if (rows.isEmpty()) {
+        QMessageBox::information(this, "report", "nothing to report");
+        return;
+    }
+
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QDir reportsDir(baseDir + "/reports");
+    reportsDir.mkpath(".");
+    QString base = sanitizedBaseName(dlg.reportName());
+    QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
+    QString fileName = reportsDir.filePath(QString("%1_%2.txt").arg(base, ts));
+    QFile f(fileName);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "error", "cannot create report file");
+        return;
+    }
+    QTextStream out(&f);
+    out.setRealNumberNotation(QTextStream::FixedNotation);
+    out.setRealNumberPrecision(2);
+
+    out << "Order Report: " << base << "  [" << ts << "]\n";
+    out << "Scope: " << (dlg.scopeFiltered() ? "Current filter" : "All orders") << "\n";
+    if (dlg.includeFiltersHeader()) {
+        out << "Filters:\n";
+        out << "  Client: " << (activeClientFilter_.isEmpty() ? "-" : activeClientFilter_) << "\n";
+        out << "  Status: " << (activeStatusFilter_.isEmpty() ? "-" : activeStatusFilter_) << "\n";
+        out << "  Total min: " << (minTotalText_.isEmpty() ? "-" : minTotalText_) << "\n";
+        out << "  Total max: " << (maxTotalText_.isEmpty() ? "-" : maxTotalText_) << "\n";
+        out << "  ID min: " << (minIdText_.isEmpty() ? "-" : minIdText_) << "\n";
+        out << "  ID max: " << (maxIdText_.isEmpty() ? "-" : maxIdText_) << "\n";
+        out << "  From: " << (useFrom_ ? fromDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+        out << "  To: " << (useTo_ ? toDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+    }
+    out << "\n";
+    out << "Orders: " << rows.size() << "\n";
+    out << "----------------------------------------\n";
+
+    double totalSum = 0.0;
+    QMap<QString, QPair<int,double>> statusAgg;
+
+    for (const Order* op : rows) {
+        const Order& o = *op;
+        totalSum += o.total;
+        statusAgg[qs(o.status)].first += 1;
+        statusAgg[qs(o.status)].second += o.total;
+
+        out << "ID: " << o.id << " | Client: " << qs(o.client) << " | Status: " << qs(o.status)
+            << " | Total: " << QString::number(o.total, 'f', 2) << " | Created: " << qs(o.createdAt) << "\n";
+        if (!o.items.empty()) {
+            out << "  Items:\n";
+            for (auto& kv : o.items) {
+                auto pit = svc_.price().find(kv.first);
+                QString priceText = (pit != svc_.price().end())
+                    ? QString::number(pit->second, 'f', 2)
+                    : QString("n/a");
+                out << "    - " << qs(kv.first) << " x" << kv.second << " @ " << priceText << "\n";
+            }
+        } else {
+            out << "  Items: -\n";
+        }
+        out << "----------------------------------------\n";
+    }
+
+    if (dlg.includeSummarySection()) {
+        out << "Summary:\n";
+        out << "  Orders: " << rows.size() << "\n";
+        out << "  Total revenue: " << QString::number(totalSum, 'f', 2) << "\n";
+    }
+    if (dlg.includeStatusSummarySection()) {
+        out << "Status summary:\n";
+        for (auto it = statusAgg.begin(); it != statusAgg.end(); ++it) {
+            out << "  " << it.key() << ": count=" << it.value().first
+                << ", revenue=" << QString::number(it.value().second, 'f', 2) << "\n";
+        }
+    }
+
+    f.close();
+    QMessageBox::information(this, "report", QString("report created: %1").arg(fileName));
+}
+
 void MainWindow::onAddProduct() { try {
     std::string name = ss(productNameEdit_->text());
     double price = parsePrice(productPriceEdit_->text());
@@ -419,59 +501,4 @@ void MainWindow::onClearFilter() {
     fromDate_ = QDateTime();
     toDate_ = QDateTime();
     refreshTable();
-}
-
-void MainWindow::onGenerateReport() {
-    QList<const Order*> rows = currentFilteredRows();
-    if (rows.isEmpty()) {
-        QMessageBox::information(this, "report", "nothing to report");
-        return;
-    }
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QDir reportsDir(baseDir + "/reports");
-    reportsDir.mkpath(".");
-    QString base = sanitizedReportBaseName();
-    QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
-    QString fileName = reportsDir.filePath(QString("%1_%2.txt").arg(base, ts));
-    QFile f(fileName);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QMessageBox::warning(this, "error", "cannot create report file");
-        return;
-    }
-    QTextStream out(&f);
-    out.setRealNumberNotation(QTextStream::FixedNotation);
-    out.setRealNumberPrecision(2);
-    out << "Order Report: " << base << "  [" << ts << "]\n";
-    out << "Filters:\n";
-    out << "  Client: " << (activeClientFilter_.isEmpty() ? "-" : activeClientFilter_) << "\n";
-    out << "  Status: " << (activeStatusFilter_.isEmpty() ? "-" : activeStatusFilter_) << "\n";
-    out << "  Total min: " << (minTotalText_.isEmpty() ? "-" : minTotalText_) << "\n";
-    out << "  Total max: " << (maxTotalText_.isEmpty() ? "-" : maxTotalText_) << "\n";
-    out << "  ID min: " << (minIdText_.isEmpty() ? "-" : minIdText_) << "\n";
-    out << "  ID max: " << (maxIdText_.isEmpty() ? "-" : maxIdText_) << "\n";
-    out << "  From: " << (useFrom_ ? fromDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
-    out << "  To: " << (useTo_ ? toDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
-    out << "\n";
-    out << "Orders: " << rows.size() << "\n";
-    out << "----------------------------------------\n";
-    for (const Order* op : rows) {
-        const Order& o = *op;
-        out << "ID: " << o.id << " | Client: " << qs(o.client) << " | Status: " << qs(o.status)
-            << " | Total: " << QString::number(o.total, 'f', 2) << " | Created: " << qs(o.createdAt) << "\n";
-        if (!o.items.empty()) {
-            out << "  Items:\n";
-            for (auto& kv : o.items) {
-                auto pit = svc_.price().find(kv.first);
-                QString priceText = (pit != svc_.price().end())
-                    ? QString::number(pit->second, 'f', 2)
-                    : QString("n/a");
-                out << "    - " << qs(kv.first) << " x" << kv.second << " @ " << priceText << "\n";
-            }
-        } else {
-            out << "  Items: -\n";
-        }
-        out << "----------------------------------------\n";
-    }
-    f.close();
-    QMessageBox::information(this, "report", QString("report created: %1").arg(fileName));
 }

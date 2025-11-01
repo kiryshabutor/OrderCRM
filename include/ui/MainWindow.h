@@ -22,6 +22,7 @@ private:
     QTableWidget* productTable_;
     QPushButton* addOrderBtn_;
     QPushButton* editOrderBtn_;
+    QPushButton* reportBtn_;
 
     QLineEdit* productNameEdit_;
     QLineEdit* productPriceEdit_;
@@ -32,10 +33,6 @@ private:
     QPushButton* filterBtn_;
     QPushButton* clearFilterBtn_;
     QLabel* titleLabel_;
-
-    QWidget* reportControls_;
-    QLineEdit* reportNameEdit_;
-    QPushButton* generateReportBtn_;
 
     QString activeClientFilter_;
     QString activeStatusFilter_;
@@ -49,17 +46,17 @@ private:
     bool useTo_{false};
 
     QList<const Order*> currentFilteredRows() const;
-    QString sanitizedReportBaseName() const;
+    static QString sanitizedBaseName(const QString& raw);
 
 private slots:
     void onAddOrder();
     void onEditOrder();
+    void onOpenReportDialog();
     void onAddProduct();
     void onUpdateProduct();
     void onRemoveProduct();
     void onOpenFilter();
     void onClearFilter();
-    void onGenerateReport();
 
 public:
     void refreshTable();
