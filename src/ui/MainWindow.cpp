@@ -3,6 +3,8 @@
 #include "include/ui/FilterDialog.h"
 #include "include/ui/NumericItem.h"
 #include "include/infrastructure/TxtProductRepository.h"
+#include "include/ui/AddOrderDialog.h"
+#include "include/ui/EditOrderDialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
@@ -14,6 +16,8 @@
 #include <QFile>
 #include <QDir>
 #include <QTextStream>
+#include <QInputDialog>
+#include <QCoreApplication>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -50,50 +54,13 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     table_->setSortingEnabled(true);
     left->addWidget(table_);
 
-    orderControls_ = new QWidget(this);
-    auto* orderLayout = new QVBoxLayout(orderControls_);
-    orderLayout->setContentsMargins(0,0,0,0);
-
-    auto* row1 = new QHBoxLayout();
-    clientEdit_ = new QLineEdit(this);
-    clientEdit_->setPlaceholderText("client name");
+    auto* actionRow = new QHBoxLayout();
     addOrderBtn_ = new QPushButton("Add order", this);
-    row1->addWidget(clientEdit_);
-    row1->addWidget(addOrderBtn_);
-    orderLayout->addLayout(row1);
-
-    auto* row2 = new QHBoxLayout();
-    orderIdEdit_ = new QLineEdit(this);
-    orderIdEdit_->setPlaceholderText("order id");
-    itemNameEdit_ = new QLineEdit(this);
-    itemNameEdit_->setPlaceholderText("item name");
-    qtyEdit_ = new QLineEdit(this);
-    qtyEdit_->setPlaceholderText("qty (pcs)");
-    addItemBtn_ = new QPushButton("Add item", this);
-    removeItemBtn_ = new QPushButton("Remove item", this);
-    row2->addWidget(orderIdEdit_);
-    row2->addWidget(itemNameEdit_);
-    row2->addWidget(qtyEdit_);
-    row2->addWidget(addItemBtn_);
-    row2->addWidget(removeItemBtn_);
-    orderLayout->addLayout(row2);
-
-    auto* row3 = new QHBoxLayout();
-    statusCombo_ = new QComboBox(this);
-    statusCombo_->addItems({"new","in_progress","done","canceled"});
-    setStatusBtn_ = new QPushButton("Set status", this);
-    row3->addWidget(statusCombo_);
-    row3->addWidget(setStatusBtn_);
-    orderLayout->addLayout(row3);
-
-    auto* row4 = new QHBoxLayout();
-    saveBtn_ = new QPushButton("Save", this);
-    loadBtn_ = new QPushButton("Load", this);
-    row4->addWidget(saveBtn_);
-    row4->addWidget(loadBtn_);
-    orderLayout->addLayout(row4);
-
-    left->addWidget(orderControls_);
+    editOrderBtn_ = new QPushButton("Edit order", this);
+    actionRow->addWidget(addOrderBtn_);
+    actionRow->addWidget(editOrderBtn_);
+    actionRow->addStretch();
+    left->addLayout(actionRow);
 
     reportControls_ = new QWidget(this);
     auto* reportLayout = new QHBoxLayout(reportControls_);
@@ -139,11 +106,7 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     setCentralWidget(central);
 
     connect(addOrderBtn_, &QPushButton::clicked, this, &MainWindow::onAddOrder);
-    connect(addItemBtn_, &QPushButton::clicked, this, &MainWindow::onAddItem);
-    connect(removeItemBtn_, &QPushButton::clicked, this, &MainWindow::onRemoveItem);
-    connect(setStatusBtn_, &QPushButton::clicked, this, &MainWindow::onSetStatus);
-    connect(saveBtn_, &QPushButton::clicked, this, &MainWindow::onSave);
-    connect(loadBtn_, &QPushButton::clicked, this, &MainWindow::onLoad);
+    connect(editOrderBtn_, &QPushButton::clicked, this, &MainWindow::onEditOrder);
     connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
     connect(updateProductBtn_, &QPushButton::clicked, this, &MainWindow::onUpdateProduct);
     connect(removeProductBtn_, &QPushButton::clicked, this, &MainWindow::onRemoveProduct);
@@ -280,20 +243,14 @@ void MainWindow::refreshTable() {
     if (filterActive) {
         filterBtn_->setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold;");
         titleLabel_->setText(QString("Filtered Table (%1 orders)").arg(foundCount));
-        orderControls_->setVisible(false);
-        saveBtn_->setVisible(false);
-        loadBtn_->setVisible(false);
         reportControls_->setVisible(true);
     } else {
         filterBtn_->setStyleSheet("");
         titleLabel_->setText(QString("Main Table (%1 orders)").arg((int)svc_.all().size()));
-        orderControls_->setVisible(true);
-        saveBtn_->setVisible(true);
-        loadBtn_->setVisible(true);
         reportControls_->setVisible(false);
     }
 
-    table_->setSortingEnabled(true);
+    table_->setSortingEnabled(!rows.isEmpty());
     filterBtn_->update();
     titleLabel_->update();
 }
@@ -335,15 +292,6 @@ void MainWindow::resizeEvent(QResizeEvent* event) {
     }
 }
 
-Order* MainWindow::orderByIdFromInput() {
-    bool ok = false;
-    int id = orderIdEdit_->text().toInt(&ok);
-    if (!ok || id <= 0) throw ValidationException("invalid id");
-    Order* o = svc_.findById(id);
-    if (!o) throw NotFoundException("order not found");
-    return o;
-}
-
 static double parsePrice(const QString& input) {
     QString s = input.trimmed();
     if (s.isEmpty()) throw ValidationException("price cannot be empty");
@@ -357,65 +305,46 @@ static double parsePrice(const QString& input) {
     return price;
 }
 
-void MainWindow::onAddOrder() { try {
-    std::string client = ss(clientEdit_->text());
-    V_.validate_client_name(client);
-    Order& o = svc_.create(client);
-    o.createdAt = QDateTime::currentDateTime().toString(Qt::ISODate).toStdString();
-    clientEdit_->clear();
-    svc_.sortById();
-    refreshTable();
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
+void MainWindow::onAddOrder() {
+    AddOrderDialog dlg(svc_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        int createdId = dlg.createdOrderId();
+        refreshTable();
+        EditOrderDialog editDlg(svc_, createdId, this);
+        connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
+        editDlg.exec();
+        refreshTable();
+    }
+}
 
-void MainWindow::onAddItem() { try {
-    Order* o = orderByIdFromInput();
-    std::string name = ss(itemNameEdit_->text());
-    V_.validate_item_name(name);
-    bool ok = false;
-    int q = qtyEdit_->text().toInt(&ok);
-    if (!ok) throw ValidationException("invalid qty");
-    V_.validate_qty(q);
-    svc_.addItem(*o, name, q);
-    itemNameEdit_->clear();
-    qtyEdit_->clear();
+void MainWindow::onEditOrder() {
+    int orderId = -1;
+    auto sel = table_->selectionModel() ? table_->selectionModel()->selectedRows() : QModelIndexList();
+    if (sel.size() == 1) {
+        bool ok = false;
+        int row = sel.first().row();
+        if (row >= 0 && row < table_->rowCount()) {
+            auto* cell = table_->item(row, 0);
+            if (cell) orderId = cell->text().toInt(&ok);
+            if (!ok) orderId = -1;
+        }
+    }
+    if (orderId <= 0) {
+        bool ok = false;
+        int id = QInputDialog::getInt(this, "Edit order", "Enter order ID:", 1, 1, 1000000000, 1, &ok);
+        if (!ok) return;
+        orderId = id;
+    }
+    const Order* o = svc_.findById(orderId);
+    if (!o) {
+        QMessageBox::warning(this, "error", "order not found");
+        return;
+    }
+    EditOrderDialog editDlg(svc_, orderId, this);
+    connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
+    editDlg.exec();
     refreshTable();
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
-
-void MainWindow::onRemoveItem() { try {
-    Order* o = orderByIdFromInput();
-    std::string name = ss(itemNameEdit_->text());
-    if (name.empty()) throw ValidationException("enter item name to remove");
-    std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c){ return std::tolower(c); });
-    auto it = o->items.find(name);
-    if (it == o->items.end()) throw NotFoundException("item not found in this order");
-    o->items.erase(it);
-    o->total = o->calcTotal(svc_.price());
-    o->total = std::round(o->total * 100.0) / 100.0;
-    refreshTable();
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
-
-void MainWindow::onSetStatus() { try {
-    Order* o = orderByIdFromInput();
-    std::string st = ss(statusCombo_->currentText());
-    V_.validate_status(st);
-    svc_.setStatus(*o, st);
-    refreshTable();
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
-
-void MainWindow::onSave() { try {
-    svc_.save();
-    QMessageBox::information(this, "ok", "saved");
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
-
-void MainWindow::onLoad() { try {
-    productSvc_.load();
-    svc_.setPrices(productSvc_.all());
-    svc_.load();
-    svc_.sortById();
-    refreshProducts();
-    refreshTable();
-    QMessageBox::information(this, "ok", "loaded");
-} catch (const CustomException& e) { QMessageBox::warning(this, "error", qs(e.what())); }}
+}
 
 void MainWindow::onAddProduct() { try {
     std::string name = ss(productNameEdit_->text());
@@ -423,7 +352,9 @@ void MainWindow::onAddProduct() { try {
     productSvc_.addProduct(name, price);
     productSvc_.save();
     svc_.setPrices(productSvc_.all());
+    svc_.save();
     refreshProducts();
+    refreshTable();
     productNameEdit_->clear();
     productPriceEdit_->clear();
     QMessageBox::information(this, "ok", "product added");
@@ -435,6 +366,7 @@ void MainWindow::onUpdateProduct() { try {
     productSvc_.updateProduct(name, name, price);
     productSvc_.save();
     svc_.setPrices(productSvc_.all());
+    svc_.save();
     refreshProducts();
     refreshTable();
     productNameEdit_->clear();
@@ -448,6 +380,7 @@ void MainWindow::onRemoveProduct() { try {
     productSvc_.removeProduct(name);
     productSvc_.save();
     svc_.setPrices(productSvc_.all());
+    svc_.save();
     refreshProducts();
     refreshTable();
     productNameEdit_->clear();
@@ -494,10 +427,12 @@ void MainWindow::onGenerateReport() {
         QMessageBox::information(this, "report", "nothing to report");
         return;
     }
-    QDir().mkpath("../reports/");
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QDir reportsDir(baseDir + "/reports");
+    reportsDir.mkpath(".");
     QString base = sanitizedReportBaseName();
     QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
-    QString fileName = QString("../reports/%1_%2.txt").arg(base, ts);
+    QString fileName = reportsDir.filePath(QString("%1_%2.txt").arg(base, ts));
     QFile f(fileName);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         QMessageBox::warning(this, "error", "cannot create report file");

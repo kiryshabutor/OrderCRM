@@ -21,7 +21,13 @@ static std::string now_iso8601_srv() {
     return os.str();
 }
 
+void OrderService::persist() {
+    save();
+}
+
 Order& OrderService::create(const std::string& client) {
+    ValidationService V;
+    V.validate_client_name(client);
     Order o;
     o.id = nextId_++;
     o.client = client;
@@ -29,30 +35,38 @@ Order& OrderService::create(const std::string& client) {
     o.total = 0;
     o.createdAt = now_iso8601_srv();
     data_.push_back(o);
+    persist();
     return data_[data_.size() - 1];
 }
 
 void OrderService::addItem(Order& o, const std::string& item, int qty) {
-    if (qty <= 0) {
-        throw ValidationException("qty must be positive");
-    }
+    if (qty <= 0) throw ValidationException("qty must be positive");
     std::string key = item;
-    std::transform(key.begin(), key.end(), key.begin(),
-                   [](unsigned char c){ return std::tolower(c); });
-
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
     auto it = price_.find(key);
-    if (it == price_.end())
-        throw NotFoundException("item not found in product base");
-
+    if (it == price_.end()) throw NotFoundException("item not found in product base");
     o.items[key] += qty;
     o.total = o.calcTotal(price_);
     o.total = std::round(o.total * 100.0) / 100.0;
+    persist();
+}
+
+void OrderService::removeItem(Order& o, const std::string& name) {
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+    auto it = o.items.find(key);
+    if (it == o.items.end()) throw NotFoundException("item not found in this order");
+    o.items.erase(it);
+    o.total = o.calcTotal(price_);
+    o.total = std::round(o.total * 100.0) / 100.0;
+    persist();
 }
 
 void OrderService::setStatus(Order& o, const std::string& s) {
     ValidationService V;
     V.validate_status(s);
     o.status = s;
+    persist();
 }
 
 Order* OrderService::findById(int id) {
@@ -72,7 +86,7 @@ void OrderService::sortById() {
 double OrderService::revenue() const {
     double s = 0;
     for (auto& o : data_) s += o.total;
-    return s;
+    return std::round(s * 100.0) / 100.0;
 }
 
 void OrderService::save() {

@@ -20,17 +20,8 @@ private:
 
     QTableWidget* table_;
     QTableWidget* productTable_;
-    QLineEdit* clientEdit_;
-    QLineEdit* orderIdEdit_;
-    QLineEdit* itemNameEdit_;
-    QLineEdit* qtyEdit_;
     QPushButton* addOrderBtn_;
-    QPushButton* addItemBtn_;
-    QPushButton* removeItemBtn_;
-    QPushButton* setStatusBtn_;
-    QPushButton* saveBtn_;
-    QPushButton* loadBtn_;
-    QComboBox* statusCombo_;
+    QPushButton* editOrderBtn_;
 
     QLineEdit* productNameEdit_;
     QLineEdit* productPriceEdit_;
@@ -41,7 +32,6 @@ private:
     QPushButton* filterBtn_;
     QPushButton* clearFilterBtn_;
     QLabel* titleLabel_;
-    QWidget* orderControls_;
 
     QWidget* reportControls_;
     QLineEdit* reportNameEdit_;
@@ -58,17 +48,12 @@ private:
     bool useFrom_{false};
     bool useTo_{false};
 
-    Order* orderByIdFromInput();
     QList<const Order*> currentFilteredRows() const;
     QString sanitizedReportBaseName() const;
 
 private slots:
     void onAddOrder();
-    void onAddItem();
-    void onRemoveItem();
-    void onSetStatus();
-    void onSave();
-    void onLoad();
+    void onEditOrder();
     void onAddProduct();
     void onUpdateProduct();
     void onRemoveProduct();

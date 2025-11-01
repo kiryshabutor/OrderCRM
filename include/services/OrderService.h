@@ -13,6 +13,7 @@ private:
     std::map<std::string, double> price_;
     int nextId_{1};
     IRepository& repo_;
+    void persist();
 public:
     explicit OrderService(IRepository& repo) : repo_(repo) {}
 
@@ -21,6 +22,7 @@ public:
 
     Order& create(const std::string& client);
     void addItem(Order& o, const std::string& name, int qty);
+    void removeItem(Order& o, const std::string& name);
     void setStatus(Order& o, const std::string& s);
 
     Order* findById(int id);
