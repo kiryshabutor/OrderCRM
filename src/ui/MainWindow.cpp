@@ -291,29 +291,10 @@ void MainWindow::refreshTable() {
             QString itemsStr;
             bool first = true;
             for (auto& kv : o.items) {
-                // Используем сохраненную цену, если она есть, иначе текущую цену
-                double itemPrice = 0.0;
-                bool priceFound = false;
-                
-                if (!o.itemPrices.empty()) {
-                    auto savedPriceIt = o.itemPrices.find(kv.first);
-                    if (savedPriceIt != o.itemPrices.end()) {
-                        itemPrice = savedPriceIt->second;
-                        priceFound = true;
-                    }
-                }
-                
-                if (!priceFound) {
-                    auto pit = svc_.price().find(kv.first);
-                    if (pit != svc_.price().end()) {
-                        itemPrice = pit->second;
-                        priceFound = true;
-                    }
-                }
-                
-                // Форматируем цену с точностью до 2 знаков после запятой
-                // Используем 'g' формат с максимальной точностью, чтобы избежать потери дробной части
-                QString priceText = priceFound ? QString::number(itemPrice, 'f', 2) : QString("n/a");
+                auto pit = svc_.price().find(kv.first);
+                QString priceText = (pit != svc_.price().end())
+                    ? QString::number(pit->second, 'f', 2)
+                    : QString("n/a");
                 if (!first) itemsStr += "\n";
                 itemsStr += QString("%1 ×%2 (%3)")
                     .arg(qs(kv.first))
@@ -565,28 +546,10 @@ void MainWindow::onOpenReportDialog() {
         bool firstItem = true;
         for (auto& kv : o.items) {
             if (!firstItem) itemsStr += "; ";
-            
-            // Используем сохраненную цену, если она есть, иначе текущую цену
-            double itemPrice = 0.0;
-            bool priceFound = false;
-            
-            if (!o.itemPrices.empty()) {
-                auto savedPriceIt = o.itemPrices.find(kv.first);
-                if (savedPriceIt != o.itemPrices.end()) {
-                    itemPrice = savedPriceIt->second;
-                    priceFound = true;
-                }
-            }
-            
-            if (!priceFound) {
-                auto pit = svc_.price().find(kv.first);
-                if (pit != svc_.price().end()) {
-                    itemPrice = pit->second;
-                    priceFound = true;
-                }
-            }
-            
-            QString priceText = priceFound ? QString::number(itemPrice, 'f', 2) : QString("n/a");
+            auto pit = svc_.price().find(kv.first);
+            QString priceText = (pit != svc_.price().end())
+                ? QString::number(pit->second, 'f', 2)
+                : QString("n/a");
             itemsStr += QString("%1 x%2 (@%3)").arg(qs(kv.first)).arg(kv.second).arg(priceText);
             firstItem = false;
         }
@@ -632,7 +595,6 @@ void MainWindow::onOpenProducts() {
     if (!productWindow_) {
         productWindow_ = new ProductWindow(productSvc_, svc_, this);
         connect(productWindow_, &ProductWindow::ordersChanged, this, &MainWindow::refreshTable);
-        connect(productWindow_, &ProductWindow::productsChanged, this, &MainWindow::refreshTable);
     }
     productWindow_->show();
     productWindow_->raise();

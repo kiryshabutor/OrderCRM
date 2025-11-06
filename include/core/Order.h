@@ -10,12 +10,10 @@ public:
     std::string client;
     std::string status;
     std::map<std::string, int> items;
-    std::map<std::string, double> itemPrices; // Цены товаров на момент заказа
     double total;
     std::string createdAt;
 
     double calcTotal(const std::map<std::string, double>& priceList) const;
-    double calcTotalFromSavedPrices() const; // Расчет по сохраненным ценам
 
     bool operator<(const Order& other) const { return id < other.id; }
     bool operator==(const Order& other) const { return id == other.id; }

@@ -82,26 +82,8 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
     }
     
     o.items[key] += qty;
-    
-    // Сохраняем текущую цену товара для всех статусов
-    // Для заказов "new" это нужно для последующего сохранения при смене статуса
-    // Для заказов не в статусе "new" это нужно, если товар добавляется в уже существующий заказ
-    // Пытаемся получить цену напрямую из ProductService для максимальной точности
-    double priceToSave = it->second;
-    if (productService_) {
-        const Product* product = productService_->findProduct(key);
-        if (product) {
-            // Используем цену напрямую из Product для точности
-            priceToSave = product->price;
-        }
-    }
-    o.itemPrices[key] = priceToSave;
-    
-    // Пересчитываем total для всех заказов
-    // Для заказов "new" используем текущие цены, для остальных - сохраненные
     o.total = o.calcTotal(price_);
     o.total = std::round(o.total * 100.0) / 100.0;
-    
     persist();
 }
 
@@ -114,19 +96,14 @@ void OrderService::removeItem(Order& o, const std::string& name) {
     int qty = it->second;
     o.items.erase(it);
     
-    // Удаляем цену товара из сохраненных цен
-    o.itemPrices.erase(key);
-    
     // Возвращаем товар на склад только если заказ не отменен
     if (o.status != "canceled" && productService_) {
         productService_->increaseStock(key, qty);
         productService_->save();
     }
     
-    // Пересчитываем total для всех заказов
     o.total = o.calcTotal(price_);
     o.total = std::round(o.total * 100.0) / 100.0;
-    
     persist();
 }
 
@@ -158,60 +135,6 @@ void OrderService::setStatus(Order& o, const std::string& s) {
     
     std::string oldStatus = o.status;
     o.status = s;
-    
-    // Если заказ переходит из статуса "new" в другой, сохраняем текущие цены товаров
-    if (oldStatus == "new" && s != "new") {
-        // Сохраняем цены всех товаров в заказе на момент изменения статуса
-        // Используем цены из itemPrices, если они уже есть (для заказов new они должны быть сохранены при добавлении товаров)
-        // Иначе пытаемся получить цену напрямую из ProductService для максимальной точности
-        for (auto& kv : o.items) {
-            // Сначала проверяем, есть ли уже сохраненная цена в itemPrices
-            auto existingPriceIt = o.itemPrices.find(kv.first);
-            if (existingPriceIt != o.itemPrices.end()) {
-                // Цена уже сохранена, оставляем как есть
-                continue;
-            }
-            // Иначе пытаемся получить цену напрямую из ProductService для точности
-            double priceToSave = 0.0;
-            if (productService_) {
-                const Product* product = productService_->findProduct(kv.first);
-                if (product) {
-                    // Используем цену напрямую из Product, которая еще не округлена в price_
-                    priceToSave = product->price;
-                } else {
-                    // Если продукт не найден, используем цену из price_
-                    auto it = price_.find(kv.first);
-                    if (it != price_.end()) {
-                        priceToSave = it->second;
-                    }
-                }
-            } else {
-                // Если ProductService не доступен, используем цену из price_
-                auto it = price_.find(kv.first);
-                if (it != price_.end()) {
-                    priceToSave = it->second;
-                }
-            }
-            if (priceToSave > 0.0) {
-                o.itemPrices[kv.first] = priceToSave;
-            }
-        }
-        // Пересчитываем total по сохраненным ценам
-        o.total = o.calcTotalFromSavedPrices();
-    }
-    // Если заказ переходит в статус "new" из другого статуса, обновляем цены по текущим
-    else if (oldStatus != "new" && s == "new") {
-        // Обновляем сохраненные цены по текущим ценам товаров
-        for (auto& kv : o.items) {
-            auto it = price_.find(kv.first);
-            if (it != price_.end()) {
-                o.itemPrices[kv.first] = it->second;
-            }
-        }
-        // Пересчитываем total по текущим ценам
-        o.total = o.calcTotal(price_);
-        o.total = std::round(o.total * 100.0) / 100.0;
-    }
     
     // Обработка изменения статуса для работы со складом
     if (productService_) {
@@ -253,55 +176,34 @@ double OrderService::revenue() const {
     return std::round(s * 100.0) / 100.0;
 }
 
-void OrderService::updateProductPriceInNewOrders(const std::string& productKey, double newPrice) {
+void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
+    std::string key = productKey;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    
+    bool changed = false;
     for (auto& order : data_) {
-        if (order.status == "new") {
-            if (order.items.find(productKey) != order.items.end()) {
-                // Обновляем сохраненную цену для этого товара
-                order.itemPrices[productKey] = newPrice;
-                // Пересчитываем total
-                order.total = order.calcTotal(price_);
-                order.total = std::round(order.total * 100.0) / 100.0;
+        // Проверяем, содержит ли заказ этот товар
+        if (order.items.find(key) != order.items.end()) {
+            double oldTotal = order.total;
+            order.total = order.calcTotal(price_);
+            order.total = std::round(order.total * 100.0) / 100.0;
+            if (std::abs(oldTotal - order.total) > 0.01) {
+                changed = true;
             }
         }
     }
-    persist();
-}
-
-void OrderService::updateProductNameInNewOrders(const std::string& oldKey, const std::string& newKey, double newPrice) {
-    for (auto& order : data_) {
-        if (order.status == "new") {
-            if (order.items.find(oldKey) != order.items.end()) {
-                // Переименовываем товар в заказе
-                int qty = order.items[oldKey];
-                order.items.erase(oldKey);
-                order.items[newKey] = qty;
-                // Обновляем цену
-                order.itemPrices.erase(oldKey);
-                order.itemPrices[newKey] = newPrice;
-                // Пересчитываем total
-                order.total = order.calcTotal(price_);
-                order.total = std::round(order.total * 100.0) / 100.0;
-            }
-        }
+    
+    if (changed) {
+        persist();
     }
-    persist();
 }
 
 void OrderService::save() {
     std::vector<Order> temp;
     for (auto& o : data_) {
         Order c = o;
-        // Пересчитываем total только для заказов в статусе "new"
-        // Для остальных используем сохраненные цены или уже вычисленный total
-        if (c.status == "new") {
-            c.total = c.calcTotal(price_);
-            c.total = std::round(c.total * 100.0) / 100.0;
-        } else if (!c.itemPrices.empty()) {
-            // Используем сохраненные цены
-            c.total = c.calcTotalFromSavedPrices();
-        }
-        // Если нет сохраненных цен и статус не "new", оставляем total как есть
+        c.total = c.calcTotal(price_);
+        c.total = std::round(c.total * 100.0) / 100.0;
         temp.push_back(c);
     }
     repo_.save(temp);
@@ -312,17 +214,8 @@ void OrderService::load() {
     data_.clear();
     for (auto& o : loaded) {
         Order c = o;
-        
-        // Пересчитываем total только для заказов в статусе "new"
-        // Для остальных используем сохраненные цены или уже вычисленный total
-        if (c.status == "new") {
-            c.total = c.calcTotal(price_);
-            c.total = std::round(c.total * 100.0) / 100.0;
-        } else if (!c.itemPrices.empty()) {
-            // Используем сохраненные цены
-            c.total = c.calcTotalFromSavedPrices();
-        }
-        // Если нет сохраненных цен и статус не "new", оставляем total как есть
+        c.total = c.calcTotal(price_);
+        c.total = std::round(c.total * 100.0) / 100.0;
         
         // Синхронизируем склад: для неотмененных заказов товары должны быть сняты со склада
         // Если товаров нет на складе, но они есть в заказе - это нормально (они уже сняты)

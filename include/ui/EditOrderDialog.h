@@ -1,11 +1,10 @@
 #pragma once
 #include <QDialog>
-#include <QTabWidget>
 #include <QLineEdit>
 #include <QComboBox>
-#include <QDialogButtonBox>
 #include <QPushButton>
 #include <QCompleter>
+#include <QTableWidget>
 #include "include/services/OrderService.h"
 #include "include/services/ProductService.h"
 
@@ -16,30 +15,22 @@ private:
     ProductService* productSvc_;
     int orderId_;
     QLineEdit* idEdit_;
-    QTabWidget* tabs_;
-
-    QWidget* tabStatus_;
     QComboBox* statusCombo_;
-    QPushButton* applyStatusBtn_;
-
-    QWidget* tabAdd_;
+    QTableWidget* itemsTable_;
     QLineEdit* addItemName_;
     QLineEdit* addQty_;
     QPushButton* addItemBtn_;
     QCompleter* addItemCompleter_;
 
-    QWidget* tabRemove_;
-    QLineEdit* removeItemName_;
-    QPushButton* removeItemBtn_;
-    QCompleter* removeItemCompleter_;
-
     Order* orderOrWarn();
     void setupCompleters();
+    void refreshItemsTable();
+    void onEditItem(const std::string& itemKey, int currentQty);
+    void onDeleteItem(const std::string& itemKey);
 
 private slots:
     void onApplyStatus();
     void onAddItem();
-    void onRemoveItem();
 
 public:
     explicit EditOrderDialog(OrderService& svc, int orderId, QWidget* parent = nullptr);

@@ -37,11 +37,7 @@ public:
 
     void sortById();
     double revenue() const;
-    
-    // Обновляет цену товара во всех заказах со статусом "new"
-    void updateProductPriceInNewOrders(const std::string& productKey, double newPrice);
-    // Обновляет имя товара во всех заказах со статусом "new"
-    void updateProductNameInNewOrders(const std::string& oldKey, const std::string& newKey, double newPrice);
+    void recalculateOrdersWithProduct(const std::string& productKey); // Пересчет заказов с товаром
 
     void save();
     void load();
