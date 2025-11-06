@@ -21,24 +21,20 @@ ReportDialog::ReportDialog(bool filterActive, QWidget* parent)
     includeFilters_->setChecked(true);
     includeSummary_ = new QCheckBox("Include summary", this);
     includeSummary_->setChecked(true);
-    includeStatusSummary_ = new QCheckBox("Include status summary", this);
-    includeStatusSummary_->setChecked(false);
 
     root->addLayout(form);
     root->addWidget(includeFilters_);
     root->addWidget(includeSummary_);
-    root->addWidget(includeStatusSummary_);
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
     root->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
-    resize(420, 220);
+    resize(420, 180);
 }
 
 QString ReportDialog::reportName() const { return nameEdit_->text().trimmed(); }
 bool ReportDialog::scopeFiltered() const { return scopeCombo_->currentIndex() == 0; }
 bool ReportDialog::includeFiltersHeader() const { return includeFilters_->isChecked(); }
 bool ReportDialog::includeSummarySection() const { return includeSummary_->isChecked(); }
-bool ReportDialog::includeStatusSummarySection() const { return includeStatusSummary_->isChecked(); }

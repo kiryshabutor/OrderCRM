@@ -4,20 +4,27 @@
 #include <algorithm>
 #include "include/core/Order.h"
 #include "include/core/IRepository.h"
+#include "include/core/Product.h"
 #include "include/Errors/CustomExceptions.h"
 #include "include/utils/SimpleList.h"
+
+class ProductService;
 
 class OrderService {
 private:
     SimpleList<Order> data_;
-    std::map<std::string, double> price_;
+    std::map<std::string, double> price_;  // Для обратной совместимости
     int nextId_{1};
     IRepository& repo_;
+    ProductService* productService_{nullptr};
     void persist();
+    void returnItemsToStock(Order& o);
+    void removeItemsFromStock(Order& o);
 public:
     explicit OrderService(IRepository& repo) : repo_(repo) {}
 
-    void setPrices(std::map<std::string, double> p) { price_ = std::move(p); }
+    void setProductService(ProductService* ps) { productService_ = ps; }
+    void setPrices(const std::map<std::string, Product>& products);
     const std::map<std::string,double>& price() const { return price_; }
 
     Order& create(const std::string& client);
@@ -30,6 +37,11 @@ public:
 
     void sortById();
     double revenue() const;
+    
+    // Обновляет цену товара во всех заказах со статусом "new"
+    void updateProductPriceInNewOrders(const std::string& productKey, double newPrice);
+    // Обновляет имя товара во всех заказах со статусом "new"
+    void updateProductNameInNewOrders(const std::string& oldKey, const std::string& newKey, double newPrice);
 
     void save();
     void load();

@@ -7,9 +7,16 @@
 #include <QLabel>
 #include <QDateTime>
 #include <QList>
+#include <QCompleter>
+#include <QStringListModel>
 #include "include/services/OrderService.h"
 #include "include/services/ProductService.h"
 #include "include/utils/validation_utils.h"
+
+class ProductWindow;
+class StatisticsWindow;
+class QDateTimeEdit;
+class QCheckBox;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -19,20 +26,37 @@ private:
     ValidationService V_;
 
     QTableWidget* table_;
-    QTableWidget* productTable_;
     QPushButton* addOrderBtn_;
-    QPushButton* editOrderBtn_;
     QPushButton* reportBtn_;
+    QPushButton* productsBtn_;
 
-    QLineEdit* productNameEdit_;
-    QLineEdit* productPriceEdit_;
-    QPushButton* addProductBtn_;
-    QPushButton* updateProductBtn_;
-    QPushButton* removeProductBtn_;
-
-    QPushButton* filterBtn_;
     QPushButton* clearFilterBtn_;
     QLabel* titleLabel_;
+    
+    // Statistics elements
+    QLabel* statsNewLabel_;
+    QLabel* statsInProgressLabel_;
+    QLabel* statsDoneLabel_;
+    QLabel* statsCanceledLabel_;
+    QLabel* statsTotalRevenueLabel_;
+    QPushButton* openChartsBtn_;
+
+    // Filter elements
+    QLineEdit* clientFilterEdit_;
+    QComboBox* statusFilterCombo_;
+    QLineEdit* minTotalEdit_;
+    QLineEdit* maxTotalEdit_;
+    QLineEdit* minIdEdit_;
+    QLineEdit* maxIdEdit_;
+    QCheckBox* useFromCheck_;
+    QDateTimeEdit* fromDateEdit_;
+    QCheckBox* useToCheck_;
+    QDateTimeEdit* toDateEdit_;
+
+    ProductWindow* productWindow_;
+    StatisticsWindow* statisticsWindow_;
+    QCompleter* clientFilterCompleter_;
+    QStringListModel* clientFilterModel_;
 
     QString activeClientFilter_;
     QString activeStatusFilter_;
@@ -47,20 +71,20 @@ private:
 
     QList<const Order*> currentFilteredRows() const;
     static QString sanitizedBaseName(const QString& raw);
+    void applyFilters();
+    void setupCompleters();
 
 private slots:
     void onAddOrder();
-    void onEditOrder();
     void onOpenReportDialog();
-    void onAddProduct();
-    void onUpdateProduct();
-    void onRemoveProduct();
-    void onOpenFilter();
+    void onOpenProducts();
+    void onOpenStatistics();
     void onClearFilter();
+    void onFilterChanged();
+    void updateStatistics();
 
 public:
     void refreshTable();
-    void refreshProducts();
     explicit MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent = nullptr);
 
 protected:

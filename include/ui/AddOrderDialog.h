@@ -2,6 +2,7 @@
 #include <QDialog>
 #include <QLineEdit>
 #include <QDialogButtonBox>
+#include <QCompleter>
 #include "include/services/OrderService.h"
 
 class AddOrderDialog : public QDialog {
@@ -10,7 +11,11 @@ private:
     OrderService& svc_;
     QLineEdit* clientEdit_;
     QDialogButtonBox* buttons_;
+    QCompleter* clientCompleter_;
     int createdId_{-1};
+    
+    void setupCompleter();
+    
 private slots:
     void onAdd();
 public:

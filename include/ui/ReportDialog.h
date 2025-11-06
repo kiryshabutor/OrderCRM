@@ -12,12 +12,10 @@ private:
     QComboBox* scopeCombo_;
     QCheckBox* includeFilters_;
     QCheckBox* includeSummary_;
-    QCheckBox* includeStatusSummary_;
 public:
     explicit ReportDialog(bool filterActive, QWidget* parent = nullptr);
     QString reportName() const;
     bool scopeFiltered() const;
     bool includeFiltersHeader() const;
     bool includeSummarySection() const;
-    bool includeStatusSummarySection() const;
 };

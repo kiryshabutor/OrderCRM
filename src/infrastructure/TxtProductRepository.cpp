@@ -1,4 +1,5 @@
 #include "include/infrastructure/TxtProductRepository.h"
+#include "include/core/Product.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -33,31 +34,50 @@ static inline double parse_price(std::string s) {
     return v;
 }
 
-std::map<std::string, double> TxtProductRepository::load() {
-    std::map<std::string, double> result;
+static inline int parse_int(std::string s) {
+    trim(s);
+    s.erase(std::remove_if(s.begin(), s.end(),
+                           [](unsigned char c){ return std::isspace(c); }),
+            s.end());
+    if (s.empty()) return 0;
+    return std::stoi(s);
+}
+
+std::map<std::string, Product> TxtProductRepository::load() {
+    std::map<std::string, Product> result;
     std::ifstream in(file_);
-    if (!in) throw IoException("cannot open products file: " + file_);
+    if (!in) {
+        // Если файл не существует, возвращаем пустой результат (не ошибка)
+        // Если файл существует но не открывается - это уже ошибка, но мы не можем различить эти случаи
+        // Поэтому просто возвращаем пустой результат
+        return result;
+    }
 
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) continue;
-        std::string name, priceStr;
+        std::string name, priceStr, stockStr;
         std::stringstream ss(line);
         std::getline(ss, name, ';');
         std::getline(ss, priceStr, ';');
+        std::getline(ss, stockStr, ';');  // Новое поле для количества (может быть пустым для старых файлов)
         trim(name);
         if (name.empty()) continue;
-        name = toLower(name);
-        result[name] = parse_price(priceStr);
+        std::string key = toLower(name);
+        double price = parse_price(priceStr);
+        int stock = stockStr.empty() ? 0 : parse_int(stockStr);  // Если количество не указано, по умолчанию 0
+        result[key] = Product(name, price, stock);
     }
     return result;
 }
 
-void TxtProductRepository::save(const std::map<std::string, double>& data) {
+void TxtProductRepository::save(const std::map<std::string, Product>& data) {
     std::ofstream out(file_);
     if (!out) throw IoException("cannot open products file for write: " + file_);
     out.setf(std::ios::fixed);
     out << std::setprecision(2);
-    for (auto& kv : data)
-        out << kv.first << ";" << kv.second << "\n";
+    for (auto& kv : data) {
+        const Product& p = kv.second;
+        out << p.name << ";" << p.price << ";" << p.stock << "\n";
+    }
 }

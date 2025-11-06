@@ -9,6 +9,6 @@ private:
 public:
     explicit TxtProductRepository(std::string f) : file_(std::move(f)) {}
 
-    std::map<std::string, double> load() override;
-    void save(const std::map<std::string, double>& data) override;
+    std::map<std::string, Product> load() override;
+    void save(const std::map<std::string, Product>& data) override;
 };

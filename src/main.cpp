@@ -32,6 +32,7 @@ int main(int argc, char *argv[]) {
     try { productSvc.load(); } catch (...) {}
 
     OrderService orderSvc(orderRepo);
+    orderSvc.setProductService(&productSvc);
     orderSvc.setPrices(productSvc.all());
     try { orderSvc.load(); } catch (...) {}
 

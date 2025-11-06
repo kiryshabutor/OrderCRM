@@ -21,10 +21,43 @@ static std::string now_iso8601() {
 }
 
 double Order::calcTotal(const std::map<std::string, double>& priceList) const {
+    // Для заказов в статусе "new" используем текущие цены из priceList
+    // Для остальных статусов используем сохраненные цены из itemPrices
+    if (status == "new") {
+        // Для заказов "new" используем текущие цены, но если есть сохраненные - используем их
+        double s = 0.0;
+        for (auto& kv : items) {
+            auto savedPriceIt = itemPrices.find(kv.first);
+            if (savedPriceIt != itemPrices.end()) {
+                s += savedPriceIt->second * kv.second;
+            } else {
+                auto it = priceList.find(kv.first);
+                if (it != priceList.end())
+                    s += it->second * kv.second;
+            }
+        }
+        return std::round(s * 100.0) / 100.0;
+    } else {
+        // Для заказов не в статусе "new" используем сохраненные цены
+        if (!itemPrices.empty()) {
+            return calcTotalFromSavedPrices();
+        }
+        // Если нет сохраненных цен (старые заказы), используем текущие цены
+        double s = 0.0;
+        for (auto& kv : items) {
+            auto it = priceList.find(kv.first);
+            if (it != priceList.end())
+                s += it->second * kv.second;
+        }
+        return std::round(s * 100.0) / 100.0;
+    }
+}
+
+double Order::calcTotalFromSavedPrices() const {
     double s = 0.0;
     for (auto& kv : items) {
-        auto it = priceList.find(kv.first);
-        if (it != priceList.end())
+        auto it = itemPrices.find(kv.first);
+        if (it != itemPrices.end())
             s += it->second * kv.second;
     }
     return std::round(s * 100.0) / 100.0;
@@ -40,6 +73,19 @@ std::string Order::toLine() const {
         if (!first) os << ',';
         os << kv.first << ':' << kv.second;
         first = false;
+    }
+    // Сохраняем цены товаров, если они есть
+    if (!itemPrices.empty()) {
+        os << '|'; // Разделитель между items и prices
+        first = true;
+        for (auto& kv : itemPrices) {
+            if (!first) os << ',';
+            // Сохраняем цену с точностью до 2 знаков после запятой
+            // НЕ округляем значение, только форматируем вывод
+            // setprecision(2) уже установлен в начале функции
+            os << kv.first << ':' << kv.second;
+            first = false;
+        }
     }
     return os.str();
 }
@@ -75,16 +121,49 @@ std::optional<Order> Order::fromLine(const std::string& line) {
     }
     o.createdAt = createdStr.empty() ? now_iso8601() : createdStr;
 
+    // Разделяем items и prices (разделитель |)
+    std::string pricesStr;
+    size_t pipePos = itemsStr.find('|');
+    if (pipePos != std::string::npos) {
+        pricesStr = itemsStr.substr(pipePos + 1);
+        itemsStr = itemsStr.substr(0, pipePos);
+    }
+
+    // Загружаем items (нормализуем имена к lowercase для совместимости)
     std::istringstream itemStream(itemsStr);
     std::string pair;
     while (std::getline(itemStream, pair, ',')) {
         size_t pos = pair.find(':');
         if (pos != std::string::npos) {
             std::string name = pair.substr(0, pos);
+            // Нормализуем имя к lowercase
+            std::transform(name.begin(), name.end(), name.begin(), ::tolower);
             int qty = std::stoi(pair.substr(pos + 1));
             o.items[name] = qty;
         }
     }
+    
+    // Загружаем prices, если они есть (нормализуем имена к lowercase)
+    if (!pricesStr.empty()) {
+        std::istringstream priceStream(pricesStr);
+        while (std::getline(priceStream, pair, ',')) {
+            size_t pos = pair.find(':');
+            if (pos != std::string::npos) {
+                std::string name = pair.substr(0, pos);
+                // Нормализуем имя к lowercase
+                std::transform(name.begin(), name.end(), name.begin(), ::tolower);
+                std::string priceStr = pair.substr(pos + 1);
+                std::replace(priceStr.begin(), priceStr.end(), ',', '.');
+                // Парсим цену как строку, чтобы сохранить точность
+                double price = std::stod(priceStr);
+                // Сохраняем цену БЕЗ округления, чтобы сохранить точность из файла
+                // Округление будет происходить только при расчете total и при сохранении
+                // Но само значение должно сохраняться с максимальной точностью
+                o.itemPrices[name] = price;
+            }
+        }
+    }
+    
     return o;
 }
 

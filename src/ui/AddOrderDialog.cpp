@@ -6,9 +6,10 @@
 #include <QFormLayout>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSet>
 
 AddOrderDialog::AddOrderDialog(OrderService& svc, QWidget* parent)
-    : QDialog(parent), svc_(svc) {
+    : QDialog(parent), svc_(svc), clientCompleter_(nullptr) {
     setWindowTitle("Add order");
     auto* root = new QVBoxLayout(this);
     auto* form = new QFormLayout();
@@ -21,12 +22,35 @@ AddOrderDialog::AddOrderDialog(OrderService& svc, QWidget* parent)
     root->addWidget(buttons_);
     connect(buttons_, &QDialogButtonBox::accepted, this, &AddOrderDialog::onAdd);
     connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    setupCompleter();
     resize(360, 120);
+}
+
+void AddOrderDialog::setupCompleter() {
+    // Получаем список всех уникальных клиентов
+    QSet<QString> clientSet;
+    const auto& orders = svc_.all();
+    for (const auto& order : orders) {
+        clientSet.insert(qs(order.client));
+    }
+    
+    QStringList clientNames = clientSet.values();
+    clientNames.sort(Qt::CaseInsensitive);
+    
+    // Создаем completer для имени клиента
+    if (clientCompleter_) {
+        delete clientCompleter_;
+    }
+    clientCompleter_ = new QCompleter(clientNames, this);
+    clientCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    clientCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    clientCompleter_->setFilterMode(Qt::MatchContains);
+    clientEdit_->setCompleter(clientCompleter_);
 }
 
 void AddOrderDialog::onAdd() {
     try {
-        std::string client = ss(clientEdit_->text());
+        std::string client = formatName(ss(clientEdit_->text()));
         ValidationService V;
         V.validate_client_name(client);
         Order& o = svc_.create(client);

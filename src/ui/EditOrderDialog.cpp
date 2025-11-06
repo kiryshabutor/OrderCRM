@@ -7,9 +7,10 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QIntValidator>
+#include <QSet>
 
 EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent)
-    : QDialog(parent), svc_(svc), orderId_(orderId) {
+    : QDialog(parent), svc_(svc), productSvc_(nullptr), orderId_(orderId), addItemCompleter_(nullptr), removeItemCompleter_(nullptr) {
     setWindowTitle("Edit order");
     auto* root = new QVBoxLayout(this);
 
@@ -73,7 +74,55 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     tabs_->addTab(tabRemove_, "Remove items");
 
     root->addWidget(tabs_);
+    setupCompleters();
     resize(420, 260);
+}
+
+void EditOrderDialog::setProductService(ProductService* productSvc) {
+    productSvc_ = productSvc;
+    setupCompleters(); // Обновляем автодополнение при установке ProductService
+}
+
+void EditOrderDialog::setupCompleters() {
+    QStringList productNames;
+    
+    // Если ProductService доступен, используем его
+    if (productSvc_) {
+        const auto& products = productSvc_->all();
+        for (const auto& kv : products) {
+            productNames << qs(kv.second.name);
+        }
+    } else {
+        // Иначе используем список продуктов из OrderService (price map)
+        const auto& prices = svc_.price();
+        QSet<QString> productSet;
+        for (const auto& kv : prices) {
+            productSet.insert(qs(kv.first));
+        }
+        productNames = productSet.values();
+    }
+    
+    productNames.sort(Qt::CaseInsensitive);
+    
+    // Создаем или обновляем completer для добавления товара
+    if (addItemCompleter_) {
+        delete addItemCompleter_;
+    }
+    addItemCompleter_ = new QCompleter(productNames, this);
+    addItemCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    addItemCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    addItemCompleter_->setFilterMode(Qt::MatchContains);
+    addItemName_->setCompleter(addItemCompleter_);
+    
+    // Создаем или обновляем completer для удаления товара
+    if (removeItemCompleter_) {
+        delete removeItemCompleter_;
+    }
+    removeItemCompleter_ = new QCompleter(productNames, this);
+    removeItemCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    removeItemCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    removeItemCompleter_->setFilterMode(Qt::MatchContains);
+    removeItemName_->setCompleter(removeItemCompleter_);
 }
 
 Order* EditOrderDialog::orderOrWarn() {
@@ -101,7 +150,7 @@ void EditOrderDialog::onAddItem() {
     try {
         Order* o = orderOrWarn();
         if (!o) return;
-        std::string name = ss(addItemName_->text());
+        std::string name = formatName(ss(addItemName_->text()));
         ValidationService V;
         V.validate_item_name(name);
         bool ok = false;
