@@ -1,12 +1,20 @@
 #include "include/ui/UtilsQt.h"
 #include "include/ui/MainWindow.h"
-#include "include/ui/ProductWindow.h"
 #include "include/ui/StatisticsWindow.h"
 #include "include/ui/NumericItem.h"
 #include "include/ui/AddOrderDialog.h"
 #include "include/ui/EditOrderDialog.h"
 #include "include/ui/ReportDialog.h"
+#include "include/ui/AddProductDialog.h"
+#include "include/core/Product.h"
+#include "include/core/Order.h"
+#include "include/Errors/CustomExceptions.h"
 #include <QVBoxLayout>
+#include <QIntValidator>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <vector>
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QHeaderView>
@@ -33,9 +41,19 @@
 #include <cmath>
 
 MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent)
-    : QMainWindow(parent), svc_(svc), productSvc_(productSvc), productWindow_(nullptr), statisticsWindow_(nullptr), clientFilterCompleter_(nullptr), clientFilterModel_(nullptr) {
+    : QMainWindow(parent), svc_(svc), productSvc_(productSvc), statisticsWindow_(nullptr), clientFilterCompleter_(nullptr), clientFilterModel_(nullptr) {
+    setWindowTitle("Order Management System");
+    
     auto* central = new QWidget(this);
-    auto* root = new QHBoxLayout(central);
+    auto* root = new QVBoxLayout(central);
+    
+    // Create tab widget
+    tabs_ = new QTabWidget(this);
+    root->addWidget(tabs_);
+    
+    // Orders tab
+    auto* ordersTab = new QWidget(this);
+    auto* ordersLayout = new QHBoxLayout(ordersTab);
 
     auto* left = new QVBoxLayout();
 
@@ -51,6 +69,16 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     table_->setColumnCount(7);
     table_->setHorizontalHeaderLabels({"ID","Client","Items","Status","Total","Created At",""});
     table_->horizontalHeader()->setStretchLastSection(false);
+    // Все колонки растягиваются, кроме последней с кнопкой
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+    // Колонка с кнопкой редактирования - фиксированная ширина
+    table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    table_->setColumnWidth(6, 40);
     table_->setWordWrap(true);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionMode(QAbstractItemView::NoSelection); // Запрещаем выделение строк
@@ -60,19 +88,10 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     auto* actionRow = new QHBoxLayout();
     addOrderBtn_ = new QPushButton("Add order", this);
     reportBtn_ = new QPushButton("Report", this);
-    productsBtn_ = new QPushButton("Products", this);
     actionRow->addWidget(addOrderBtn_);
     actionRow->addWidget(reportBtn_);
-    actionRow->addWidget(productsBtn_);
     actionRow->addStretch();
     left->addLayout(actionRow);
-    
-    // Визуальное разделение между таблицей и фильтрами
-    auto* separator = new QFrame(this);
-    separator->setFrameShape(QFrame::VLine);
-    separator->setFrameShadow(QFrame::Sunken);
-    separator->setStyleSheet("background-color: #000000; max-width: 2px;");
-    root->addWidget(separator);
 
     // Right panel - Filters
     auto* right = new QVBoxLayout();
@@ -178,16 +197,74 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     right->addLayout(statsLayout);
     right->addStretch();
 
-    root->addLayout(left, 3);
-    root->addLayout(right, 1);
+    ordersLayout->addLayout(left, 3);
+    ordersLayout->addLayout(right, 1);
+    tabs_->addTab(ordersTab, "Orders");
+    
+    // Products tab
+    auto* productsTab = new QWidget(this);
+    auto* productsLayout = new QHBoxLayout(productsTab);
+    
+    // Left side - Products table
+    auto* productsLeft = new QVBoxLayout();
+    productTable_ = new QTableWidget(this);
+    productTable_->setColumnCount(5);
+    productTable_->setHorizontalHeaderLabels({"Product","Price","Stock","",""});
+    productTable_->horizontalHeader()->setStretchLastSection(false);
+    // Первые три колонки растягиваются
+    productTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    productTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    productTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    // Колонки с кнопками - фиксированная ширина по размеру кнопок
+    productTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    productTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    productTable_->setColumnWidth(3, 40); // Ширина кнопки редактирования
+    productTable_->setColumnWidth(4, 40); // Ширина кнопки удаления
+    productTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    productTable_->setSelectionMode(QAbstractItemView::NoSelection);
+    productTable_->setSortingEnabled(true);
+    productsLeft->addWidget(productTable_);
+    
+    auto* prodButtons = new QHBoxLayout();
+    addProductBtn_ = new QPushButton("Add product", this);
+    prodButtons->addWidget(addProductBtn_);
+    prodButtons->addStretch();
+    productsLeft->addLayout(prodButtons);
+    
+    // Right side - Statistics
+    auto* productsRight = new QVBoxLayout();
+    auto* productStatsLabel = new QLabel("Product Statistics", this);
+    productStatsLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
+    productsRight->addWidget(productStatsLabel);
+    
+    productStatsLowStockLabel_ = new QLabel("Low Stock (Top 3):", this);
+    productStatsHighStockLabel_ = new QLabel("High Stock (Top 3):", this);
+    productStatsExpensiveLabel_ = new QLabel("Most Expensive (Top 3):", this);
+    productStatsCheapLabel_ = new QLabel("Cheapest (Top 3):", this);
+    productStatsTotalCountLabel_ = new QLabel("Total Products: 0", this);
+    productStatsTotalValueLabel_ = new QLabel("Total Value: $0.00", this);
+    
+    productsRight->addWidget(productStatsLowStockLabel_);
+    productsRight->addWidget(productStatsHighStockLabel_);
+    productsRight->addWidget(productStatsExpensiveLabel_);
+    productsRight->addWidget(productStatsCheapLabel_);
+    productsRight->addSpacing(20);
+    productsRight->addWidget(productStatsTotalCountLabel_);
+    productsRight->addWidget(productStatsTotalValueLabel_);
+    productsRight->addStretch();
+    
+    productsLayout->addLayout(productsLeft, 3);
+    productsLayout->addLayout(productsRight, 1);
+    tabs_->addTab(productsTab, "Products");
+    
     setCentralWidget(central);
 
     // Connect signals
     connect(addOrderBtn_, &QPushButton::clicked, this, &MainWindow::onAddOrder);
     connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onOpenReportDialog);
-    connect(productsBtn_, &QPushButton::clicked, this, &MainWindow::onOpenProducts);
     connect(openChartsBtn_, &QPushButton::clicked, this, &MainWindow::onOpenStatistics);
     connect(clearFilterBtn_, &QPushButton::clicked, this, &MainWindow::onClearFilter);
+    connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
 
     // Connect filter controls
     connect(clientFilterEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
@@ -208,9 +285,11 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     connect(toDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
 
     setupCompleters();
-    this->resize(1200, 600);
+    showMaximized(); // Fullscreen mode
     refreshTable();
+    refreshProducts();
     updateStatistics();
+    updateProductStatistics();
     QTimer::singleShot(0, this, [this] { resizeEvent(nullptr); });
 }
 
@@ -443,20 +522,14 @@ void MainWindow::refreshTable() {
 void MainWindow::resizeEvent(QResizeEvent* event) {
     QMainWindow::resizeEvent(event);
     if (table_) {
-        int totalWidth = table_->viewport()->width();
-        table_->setColumnWidth(0, totalWidth * 0.075);
-        table_->setColumnWidth(1, totalWidth * 0.17);
-        table_->setColumnWidth(2, totalWidth * 0.28);
-        table_->setColumnWidth(3, totalWidth * 0.13);
-        table_->setColumnWidth(4, totalWidth * 0.095);
-        table_->setColumnWidth(5, totalWidth * 0.19);
-        table_->setColumnWidth(6, 50); // Фиксированная ширина для колонки с кнопкой редактирования
+        // Колонки таблицы заказов растягиваются автоматически, только высота строк нужна
         table_->resizeRowsToContents();
         for (int row = 0; row < table_->rowCount(); ++row) {
             int h = table_->rowHeight(row);
             table_->setRowHeight(row, h + 8);
         }
     }
+    // Product table columns are set to stretch automatically, no need to resize manually
 }
 
 
@@ -591,14 +664,350 @@ void MainWindow::onOpenReportDialog() {
     QMessageBox::information(this, "report", QString("Excel report created: %1").arg(fileName));
 }
 
-void MainWindow::onOpenProducts() {
-    if (!productWindow_) {
-        productWindow_ = new ProductWindow(productSvc_, svc_, this);
-        connect(productWindow_, &ProductWindow::ordersChanged, this, &MainWindow::refreshTable);
+// Products methods
+static double parsePrice(const QString& input) {
+    QString s = input.trimmed();
+    if (s.isEmpty()) throw ValidationException("price cannot be empty");
+    s.replace(',', '.');
+    bool ok = false;
+    double price = s.toDouble(&ok);
+    if (!ok || price <= 0.0) throw ValidationException("invalid price");
+    double cents = std::round(price * 100.0);
+    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
+    price = cents / 100.0;
+    return price;
+}
+
+void MainWindow::refreshProducts() {
+    productTable_->setSortingEnabled(false);
+    const auto& p = productSvc_.all();
+    productTable_->clearContents();
+    productTable_->setRowCount((int)p.size());
+    int i = 0;
+    for (auto& kv : p) {
+        const Product& prod = kv.second;
+        std::string productKey = kv.first;
+        
+        auto* nameCell = new QTableWidgetItem(qs(prod.name));
+        nameCell->setTextAlignment(Qt::AlignCenter);
+        auto* priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
+        priceCell->setTextAlignment(Qt::AlignCenter);
+        auto* stockCell = new QTableWidgetItem(QString::number(prod.stock));
+        stockCell->setTextAlignment(Qt::AlignCenter);
+        
+        productTable_->setItem(i, 0, nameCell);
+        productTable_->setItem(i, 1, priceCell);
+        productTable_->setItem(i, 2, stockCell);
+        
+        // Edit button
+        auto* editBtn = new QPushButton("⚙️", this);
+        editBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #2196F3;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #1976D2;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #0D47A1;"
+            "}"
+        );
+        editBtn->setToolTip("Edit product");
+        editBtn->setFixedSize(35, 25);
+        connect(editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onEditProduct(productKey, productName);
+        });
+        
+        // Delete button
+        auto* deleteBtn = new QPushButton("❌", this);
+        deleteBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #F44336;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #D32F2F;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #B71C1C;"
+            "}"
+        );
+        deleteBtn->setToolTip("Delete product");
+        deleteBtn->setFixedSize(35, 25);
+        connect(deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onDeleteProduct(productKey, productName);
+        });
+        
+        // Wrappers for centering
+        auto* editWidget = new QWidget(this);
+        auto* editLayout = new QHBoxLayout(editWidget);
+        editLayout->setAlignment(Qt::AlignCenter);
+        editLayout->setContentsMargins(0, 0, 0, 0);
+        editLayout->addWidget(editBtn);
+        productTable_->setCellWidget(i, 3, editWidget);
+        
+        auto* deleteWidget = new QWidget(this);
+        auto* deleteLayout = new QHBoxLayout(deleteWidget);
+        deleteLayout->setAlignment(Qt::AlignCenter);
+        deleteLayout->setContentsMargins(0, 0, 0, 0);
+        deleteLayout->addWidget(deleteBtn);
+        productTable_->setCellWidget(i, 4, deleteWidget);
+        
+        ++i;
     }
-    productWindow_->show();
-    productWindow_->raise();
-    productWindow_->activateWindow();
+    productTable_->setSortingEnabled(true);
+    
+    updateProductStatistics();
+}
+
+void MainWindow::onAddProduct() {
+    AddProductDialog dlg(productSvc_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        std::string addedName = dlg.addedProductName();
+        if (!addedName.empty()) {
+            svc_.setPrices(productSvc_.all());
+            std::string key = addedName;
+            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            svc_.recalculateOrdersWithProduct(key);
+            svc_.save();
+            refreshTable();
+        }
+        refreshProducts();
+    }
+}
+
+bool MainWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) {
+    affectedOrderIds.clear();
+    const auto& orders = svc_.all();
+    for (const auto& order : orders) {
+        if (order.status == "new" || order.status == "in_progress") {
+            if (order.items.find(productKey) != order.items.end()) {
+                affectedOrderIds.append(order.id);
+            }
+        }
+    }
+    return !affectedOrderIds.isEmpty();
+}
+
+void MainWindow::onDeleteProduct(const std::string& productKey, const std::string& productName) {
+    try {
+        QList<int> affectedOrderIds;
+        bool isUsed = isProductUsedInActiveOrders(productKey, affectedOrderIds);
+        
+        if (isUsed) {
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle("Delete Product");
+            msgBox.setIcon(QMessageBox::Warning);
+            msgBox.setText(QString("Product '%1' is used in %2 active order(s) (new or in_progress).")
+                          .arg(qs(productName))
+                          .arg(affectedOrderIds.size()));
+            msgBox.setInformativeText("What would you like to do?");
+            
+            QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+            QPushButton* cancelOrdersBtn = msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+            
+            msgBox.setDefaultButton(cancelBtn);
+            msgBox.exec();
+            
+            if (msgBox.clickedButton() == cancelBtn) {
+                return;
+            }
+            
+            svc_.setProductService(&productSvc_);
+            
+            for (int orderId : affectedOrderIds) {
+                Order* order = svc_.findById(orderId);
+                if (order) {
+                    try {
+                        svc_.setStatus(*order, "canceled");
+                    } catch (const CustomException& e) {
+                        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
+                                            .arg(orderId)
+                                            .arg(qs(e.what())));
+                    }
+                }
+            }
+            svc_.save();
+        }
+        
+        productSvc_.removeProduct(productName);
+        productSvc_.save();
+        svc_.setPrices(productSvc_.all());
+        svc_.save();
+        refreshProducts();
+        refreshTable();
+        
+        if (isUsed) {
+            QMessageBox::information(this, "ok", QString("Product removed. %1 order(s) were canceled.")
+                                    .arg(affectedOrderIds.size()));
+        } else {
+            QMessageBox::information(this, "ok", "product removed");
+        }
+    } catch (const CustomException& e) { 
+        QMessageBox::warning(this, "error", qs(e.what())); 
+    }
+}
+
+void MainWindow::onEditProduct(const std::string& productKey, const std::string& productName) {
+    const Product* product = productSvc_.findProduct(productName);
+    if (!product) {
+        QMessageBox::warning(this, "error", "product not found");
+        return;
+    }
+    
+    QDialog* editDialog = new QDialog(this);
+    editDialog->setWindowTitle("Edit Product");
+    editDialog->setModal(true);
+    
+    auto* layout = new QVBoxLayout(editDialog);
+    auto* form = new QFormLayout();
+    
+    QLineEdit* nameEdit = new QLineEdit(editDialog);
+    nameEdit->setText(qs(product->name));
+    form->addRow("Product name:", nameEdit);
+    
+    QLineEdit* priceEdit = new QLineEdit(editDialog);
+    priceEdit->setText(QString::number(product->price, 'f', 2));
+    form->addRow("Price:", priceEdit);
+    
+    QLineEdit* stockEdit = new QLineEdit(editDialog);
+    stockEdit->setText(QString::number(product->stock));
+    stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
+    form->addRow("Stock:", stockEdit);
+    
+    layout->addLayout(form);
+    
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
+    buttons->button(QDialogButtonBox::Ok)->setText("Save");
+    layout->addWidget(buttons);
+    
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, productKey, oldName = productName]() {
+        try {
+            std::string newName = formatName(ss(nameEdit->text()));
+            if (newName.empty()) {
+                QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
+                return;
+            }
+            
+            double oldPrice = 0.0;
+            const Product* oldProduct = productSvc_.findProduct(oldName);
+            if (oldProduct) {
+                oldPrice = oldProduct->price;
+            }
+            
+            double price = parsePrice(priceEdit->text());
+            bool ok = false;
+            int stock = stockEdit->text().toInt(&ok);
+            if (!ok || stock < 0) {
+                QMessageBox::warning(editDialog, "error", "Invalid stock value");
+                return;
+            }
+            
+            productSvc_.updateProduct(oldName, newName, price, stock);
+            productSvc_.save();
+            
+            svc_.setPrices(productSvc_.all());
+            bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
+            bool nameChanged = (oldName != newName);
+            
+            if (priceChanged || nameChanged) {
+                if (nameChanged) {
+                    std::string oldKey = oldName;
+                    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+                    svc_.recalculateOrdersWithProduct(oldKey);
+                }
+                std::string newKey = newName;
+                std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+                svc_.recalculateOrdersWithProduct(newKey);
+            }
+            svc_.save();
+            
+            refreshProducts();
+            refreshTable();
+            
+            editDialog->accept();
+            QMessageBox::information(this, "ok", "product updated");
+        } catch (const CustomException& e) {
+            QMessageBox::warning(editDialog, "error", qs(e.what()));
+        }
+    });
+    
+    connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
+    
+    editDialog->resize(400, 150);
+    editDialog->exec();
+    delete editDialog;
+}
+
+void MainWindow::updateProductStatistics() {
+    const auto& products = productSvc_.all();
+    
+    // Convert to vector for sorting
+    std::vector<std::pair<std::string, Product>> productsVec;
+    for (const auto& kv : products) {
+        productsVec.push_back({kv.first, kv.second});
+    }
+    
+    // Sort by stock (lowest first)
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.stock < b.second.stock; });
+    
+    QString lowStock = "Low Stock (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        lowStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
+    }
+    productStatsLowStockLabel_->setText(lowStock);
+    
+    // Sort by stock (highest first)
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.stock > b.second.stock; });
+    
+    QString highStock = "High Stock (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        highStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
+    }
+    productStatsHighStockLabel_->setText(highStock);
+    
+    // Sort by price (highest first)
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.price > b.second.price; });
+    
+    QString expensive = "Most Expensive (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        expensive += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
+                    .arg(QString::number(productsVec[i].second.price, 'f', 2));
+    }
+    productStatsExpensiveLabel_->setText(expensive);
+    
+    // Sort by price (lowest first)
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.price < b.second.price; });
+    
+    QString cheap = "Cheapest (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        cheap += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
+                .arg(QString::number(productsVec[i].second.price, 'f', 2));
+    }
+    productStatsCheapLabel_->setText(cheap);
+    
+    // Total statistics
+    int totalCount = products.size();
+    double totalValue = 0.0;
+    for (const auto& kv : products) {
+        totalValue += kv.second.price * kv.second.stock;
+    }
+    
+    productStatsTotalCountLabel_->setText(QString("Total Products: %1").arg(totalCount));
+    productStatsTotalValueLabel_->setText(QString("Total Value: $%1").arg(QString::number(totalValue, 'f', 2)));
 }
 
 void MainWindow::onOpenStatistics() {

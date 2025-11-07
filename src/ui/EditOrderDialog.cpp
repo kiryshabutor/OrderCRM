@@ -44,12 +44,16 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     itemsTable_->setColumnCount(4);
     itemsTable_->setHorizontalHeaderLabels({"Product", "Quantity", "", ""});
     itemsTable_->horizontalHeader()->setStretchLastSection(false);
+    // Первые две колонки растягиваются
+    itemsTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    // Колонки с кнопками - фиксированная ширина
+    itemsTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    itemsTable_->setColumnWidth(2, 40);
+    itemsTable_->setColumnWidth(3, 40);
     itemsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     itemsTable_->setSelectionMode(QAbstractItemView::NoSelection);
-    itemsTable_->setColumnWidth(0, 200);
-    itemsTable_->setColumnWidth(1, 100);
-    itemsTable_->setColumnWidth(2, 50);
-    itemsTable_->setColumnWidth(3, 50);
     root->addWidget(itemsTable_);
 
     // Add item section

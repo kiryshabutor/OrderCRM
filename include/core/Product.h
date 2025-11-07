@@ -1,7 +1,8 @@
 #pragma once
 #include <string>
 
-struct Product {
+class Product {
+public:
     std::string name;
     double price;
     int stock;  // количество на складе

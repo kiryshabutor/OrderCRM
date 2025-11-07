@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <string>
 
-struct CustomException : std::runtime_error { using std::runtime_error::runtime_error; };
-struct ValidationException : CustomException { using CustomException::CustomException; };
-struct NotFoundException : CustomException { using CustomException::CustomException; };
-struct IoException : CustomException { using CustomException::CustomException; };
+class CustomException : public std::runtime_error { public: using std::runtime_error::runtime_error; };
+class ValidationException : public CustomException { public: using CustomException::CustomException; };
+class NotFoundException : public CustomException { public: using CustomException::CustomException; };
+class IoException : public CustomException { public: using CustomException::CustomException; };

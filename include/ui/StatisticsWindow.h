@@ -29,7 +29,8 @@ private slots:
     void onAnimationTick();
 
 private:
-    struct StatusStats {
+    class StatusStats {
+    public:
         int newCount = 0;
         int inProgressCount = 0;
         int doneCount = 0;

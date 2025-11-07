@@ -9,11 +9,11 @@
 #include <QList>
 #include <QCompleter>
 #include <QStringListModel>
+#include <QTabWidget>
 #include "include/services/OrderService.h"
 #include "include/services/ProductService.h"
 #include "include/utils/validation_utils.h"
 
-class ProductWindow;
 class StatisticsWindow;
 class QDateTimeEdit;
 class QCheckBox;
@@ -25,10 +25,12 @@ private:
     ProductService& productSvc_;
     ValidationService V_;
 
+    QTabWidget* tabs_;
+    
+    // Orders tab
     QTableWidget* table_;
     QPushButton* addOrderBtn_;
     QPushButton* reportBtn_;
-    QPushButton* productsBtn_;
 
     QPushButton* clearFilterBtn_;
     QLabel* titleLabel_;
@@ -53,7 +55,16 @@ private:
     QCheckBox* useToCheck_;
     QDateTimeEdit* toDateEdit_;
 
-    ProductWindow* productWindow_;
+    // Products tab
+    QTableWidget* productTable_;
+    QPushButton* addProductBtn_;
+    QLabel* productStatsLowStockLabel_;
+    QLabel* productStatsHighStockLabel_;
+    QLabel* productStatsExpensiveLabel_;
+    QLabel* productStatsCheapLabel_;
+    QLabel* productStatsTotalCountLabel_;
+    QLabel* productStatsTotalValueLabel_;
+
     StatisticsWindow* statisticsWindow_;
     QCompleter* clientFilterCompleter_;
     QStringListModel* clientFilterModel_;
@@ -77,11 +88,16 @@ private:
 private slots:
     void onAddOrder();
     void onOpenReportDialog();
-    void onOpenProducts();
     void onOpenStatistics();
     void onClearFilter();
     void onFilterChanged();
     void updateStatistics();
+    void onAddProduct();
+    void refreshProducts();
+    void updateProductStatistics();
+    void onEditProduct(const std::string& productKey, const std::string& productName);
+    void onDeleteProduct(const std::string& productKey, const std::string& productName);
+    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds);
 
 public:
     void refreshTable();
