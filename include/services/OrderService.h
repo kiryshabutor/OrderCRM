@@ -13,7 +13,7 @@ class ProductService;
 class OrderService {
 private:
     SimpleList<Order> data_;
-    std::map<std::string, double> price_;  // Для обратной совместимости
+    std::map<std::string, double> price_;
     int nextId_{1};
     IRepository& repo_;
     ProductService* productService_{nullptr};
@@ -37,7 +37,7 @@ public:
 
     void sortById();
     double revenue() const;
-    void recalculateOrdersWithProduct(const std::string& productKey); // Пересчет заказов с товаром
+    void recalculateOrdersWithProduct(const std::string& productKey);
 
     void save();
     void load();

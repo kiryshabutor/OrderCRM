@@ -26,7 +26,6 @@ public:
     void removeProduct(const std::string& name);
     void updateProduct(const std::string& oldName, const std::string& newName, double newPrice, int stock = -1);
     
-    // Методы для работы с количеством на складе
     void decreaseStock(const std::string& name, int qty);
     void increaseStock(const std::string& name, int qty);
     bool hasEnoughStock(const std::string& name, int qty) const;

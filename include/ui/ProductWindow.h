@@ -26,7 +26,7 @@ private slots:
     void onAddProduct();
 
 signals:
-    void ordersChanged(); // Сигнал об изменении заказов
+    void ordersChanged();
 
 public:
     explicit ProductWindow(ProductService& productSvc, OrderService& orderSvc, QWidget* parent = nullptr);

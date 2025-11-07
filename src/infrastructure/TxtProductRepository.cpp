@@ -47,9 +47,6 @@ std::map<std::string, Product> TxtProductRepository::load() {
     std::map<std::string, Product> result;
     std::ifstream in(file_);
     if (!in) {
-        // Если файл не существует, возвращаем пустой результат (не ошибка)
-        // Если файл существует но не открывается - это уже ошибка, но мы не можем различить эти случаи
-        // Поэтому просто возвращаем пустой результат
         return result;
     }
 
@@ -60,12 +57,12 @@ std::map<std::string, Product> TxtProductRepository::load() {
         std::stringstream ss(line);
         std::getline(ss, name, ';');
         std::getline(ss, priceStr, ';');
-        std::getline(ss, stockStr, ';');  // Новое поле для количества (может быть пустым для старых файлов)
+        std::getline(ss, stockStr, ';');
         trim(name);
         if (name.empty()) continue;
         std::string key = toLower(name);
         double price = parse_price(priceStr);
-        int stock = stockStr.empty() ? 0 : parse_int(stockStr);  // Если количество не указано, по умолчанию 0
+        int stock = stockStr.empty() ? 0 : parse_int(stockStr);
         result[key] = Product(name, price, stock);
     }
     return result;

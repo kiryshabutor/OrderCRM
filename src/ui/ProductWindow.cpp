@@ -65,7 +65,6 @@ ProductWindow::ProductWindow(ProductService& productSvc, OrderService& orderSvc,
 
 void ProductWindow::showEvent(QShowEvent* event) {
     QMainWindow::showEvent(event);
-    // Обновляем данные при показе окна, чтобы отобразить актуальное количество на складе
     refreshProducts();
 }
 
@@ -77,9 +76,8 @@ void ProductWindow::refreshProducts() {
     int i = 0;
     for (auto& kv : p) {
         const Product& prod = kv.second;
-        std::string productKey = kv.first; // Сохраняем ключ продукта (lowercase)
+        std::string productKey = kv.first;
         
-        // Ячейки с данными
         auto* nameCell = new QTableWidgetItem(qs(prod.name));
         nameCell->setTextAlignment(Qt::AlignCenter);
         auto* priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
@@ -91,7 +89,6 @@ void ProductWindow::refreshProducts() {
         productTable_->setItem(i, 1, priceCell);
         productTable_->setItem(i, 2, stockCell);
         
-        // Кнопка редактирования (шестерня)
         auto* editBtn = new QPushButton("⚙️", this);
         editBtn->setStyleSheet(
             "QPushButton {"
@@ -115,7 +112,6 @@ void ProductWindow::refreshProducts() {
             onEditProduct(productKey, productName);
         });
         
-        // Кнопка удаления (красный крестик)
         auto* deleteBtn = new QPushButton("❌", this);
         deleteBtn->setStyleSheet(
             "QPushButton {"
@@ -139,7 +135,6 @@ void ProductWindow::refreshProducts() {
             onDeleteProduct(productKey, productName);
         });
         
-        // Обёртки для центрирования кнопок
         auto* editContainer = new QWidget(this);
         auto* editLayout = new QHBoxLayout(editContainer);
         editLayout->setContentsMargins(0, 0, 0, 0);
@@ -161,7 +156,6 @@ void ProductWindow::refreshProducts() {
     }
     productTable_->setSortingEnabled(true);
     
-    // Устанавливаем ширину колонок
     int totalWidth = productTable_->viewport()->width();
     productTable_->setColumnWidth(0, totalWidth * 0.35);
     productTable_->setColumnWidth(1, totalWidth * 0.20);
@@ -169,12 +163,10 @@ void ProductWindow::refreshProducts() {
     productTable_->setColumnWidth(3, 50);
     productTable_->setColumnWidth(4, 50);
     
-    setupCompleters(); // Обновляем автодополнение при обновлении списка продуктов
+    setupCompleters();
 }
 
 void ProductWindow::setupCompleters() {
-    // Completer больше не нужен, так как поля ввода убраны
-    // Оставляем метод для совместимости, но он пустой
 }
 
 void ProductWindow::onAddProduct() {
@@ -182,13 +174,12 @@ void ProductWindow::onAddProduct() {
     if (dlg.exec() == QDialog::Accepted) {
         std::string addedName = dlg.addedProductName();
         if (!addedName.empty()) {
-            // Обновляем цены и пересчитываем заказы с новым товаром
             orderSvc_.setPrices(productSvc_.all());
             std::string key = addedName;
             std::transform(key.begin(), key.end(), key.begin(), ::tolower);
             orderSvc_.recalculateOrdersWithProduct(key);
             orderSvc_.save();
-            emit ordersChanged(); // Сигнал об изменении заказов
+            emit ordersChanged();
         }
         refreshProducts();
     }
@@ -214,7 +205,6 @@ void ProductWindow::onDeleteProduct(const std::string& productKey, const std::st
         bool isUsed = isProductUsedInActiveOrders(productKey, affectedOrderIds);
         
         if (isUsed) {
-            // Показываем диалог с выбором
             QMessageBox msgBox(this);
             msgBox.setWindowTitle("Delete Product");
             msgBox.setIcon(QMessageBox::Warning);
@@ -230,21 +220,17 @@ void ProductWindow::onDeleteProduct(const std::string& productKey, const std::st
             msgBox.exec();
             
             if (msgBox.clickedButton() == cancelBtn) {
-                return; // Отмена удаления
+                return;
             }
             
-            // Убеждаемся, что ProductService установлен в OrderService
             orderSvc_.setProductService(&productSvc_);
             
-            // Отменяем все заказы с этим товаром
             for (int orderId : affectedOrderIds) {
                 Order* order = orderSvc_.findById(orderId);
                 if (order) {
                     try {
-                        // Сохраняем старый статус для проверки
                         std::string oldStatus = order->status;
                         orderSvc_.setStatus(*order, "canceled");
-                        // Проверяем, что статус действительно изменился
                         if (order->status != "canceled") {
                             QMessageBox::warning(this, "error", QString("Failed to cancel order %1").arg(orderId));
                         }
@@ -255,14 +241,11 @@ void ProductWindow::onDeleteProduct(const std::string& productKey, const std::st
                     }
                 }
             }
-            // Сохраняем изменения в заказах
             orderSvc_.save();
             
-            // Отправляем сигнал об изменении заказов
             emit ordersChanged();
         }
         
-        // Удаляем товар
         productSvc_.removeProduct(productName);
         productSvc_.save();
         orderSvc_.setPrices(productSvc_.all());
@@ -287,7 +270,6 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
         return;
     }
     
-    // Создаём диалог редактирования
     QDialog* editDialog = new QDialog(this);
     editDialog->setWindowTitle("Edit Product");
     editDialog->setModal(true);
@@ -322,7 +304,6 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
                 return;
             }
             
-            // Сохраняем старую цену для проверки изменений
             double oldPrice = 0.0;
             const Product* oldProduct = productSvc_.findProduct(oldName);
             if (oldProduct) {
@@ -340,13 +321,11 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
             productSvc_.updateProduct(oldName, newName, price, stock);
             productSvc_.save();
             
-            // Обновляем цены и пересчитываем заказы
             orderSvc_.setPrices(productSvc_.all());
             bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
             bool nameChanged = (oldName != newName);
             
             if (priceChanged || nameChanged) {
-                // Если имя изменилось, пересчитываем заказы со старым и новым именем
                 if (nameChanged) {
                     std::string oldKey = oldName;
                     std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
@@ -360,7 +339,7 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
             
             refreshProducts();
             if (priceChanged || nameChanged) {
-                emit ordersChanged(); // Сигнал об изменении заказов
+                emit ordersChanged();
             }
             
             editDialog->accept();

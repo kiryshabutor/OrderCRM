@@ -27,7 +27,6 @@ private:
 
     QTabWidget* tabs_;
     
-    // Orders tab
     QTableWidget* table_;
     QPushButton* addOrderBtn_;
     QPushButton* reportBtn_;
@@ -35,7 +34,6 @@ private:
     QPushButton* clearFilterBtn_;
     QLabel* titleLabel_;
     
-    // Statistics elements
     QLabel* statsNewLabel_;
     QLabel* statsInProgressLabel_;
     QLabel* statsDoneLabel_;
@@ -43,7 +41,6 @@ private:
     QLabel* statsTotalRevenueLabel_;
     QPushButton* openChartsBtn_;
 
-    // Filter elements
     QLineEdit* clientFilterEdit_;
     QComboBox* statusFilterCombo_;
     QLineEdit* minTotalEdit_;
@@ -55,7 +52,6 @@ private:
     QCheckBox* useToCheck_;
     QDateTimeEdit* toDateEdit_;
 
-    // Products tab
     QTableWidget* productTable_;
     QPushButton* addProductBtn_;
     QLabel* productStatsLowStockLabel_;

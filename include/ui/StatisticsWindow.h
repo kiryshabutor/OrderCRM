@@ -13,7 +13,7 @@ class StatisticsWindow : public QMainWindow {
 private:
     OrderService& svc_;
     QTimer* animationTimer_;
-    double animationProgress_; // 0.0 to 1.0
+    double animationProgress_;
 
     void updateStatistics();
 

@@ -29,7 +29,7 @@ void ProductService::load() {
         Product p = kv.second;
         p.price = std::round(p.price * 100.0) / 100.0;
         if (p.price > 0.0) {
-            if (p.stock < 0) p.stock = 0;  // Отрицательное количество недопустимо
+            if (p.stock < 0) p.stock = 0;
             normalized[kv.first] = p;
         }
     }
@@ -75,7 +75,7 @@ void ProductService::updateProduct(const std::string& oldName, const std::string
     Product p = it->second;
     p.name = newName;
     p.price = v;
-    if (stock >= 0) p.stock = stock;  // Обновляем количество только если указано
+    if (stock >= 0) p.stock = stock;
     products_.erase(it);
     products_[newKey] = p;
 }

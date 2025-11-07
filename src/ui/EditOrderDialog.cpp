@@ -20,7 +20,6 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     setWindowTitle("Edit order");
     auto* root = new QVBoxLayout(this);
 
-    // Order ID
     auto* idRow = new QFormLayout();
     idEdit_ = new QLineEdit(this);
     idEdit_->setText(QString::number(orderId_));
@@ -28,7 +27,6 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     idRow->addRow("Order ID:", idEdit_);
     root->addLayout(idRow);
 
-    // Status
     auto* statusForm = new QFormLayout();
     statusCombo_ = new QComboBox(this);
     statusCombo_->addItems({"new","in_progress","done","canceled"});
@@ -39,15 +37,12 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     root->addWidget(applyStatusBtn);
     connect(applyStatusBtn, &QPushButton::clicked, this, &EditOrderDialog::onApplyStatus);
 
-    // Items table
     itemsTable_ = new QTableWidget(this);
     itemsTable_->setColumnCount(4);
     itemsTable_->setHorizontalHeaderLabels({"Product", "Quantity", "", ""});
     itemsTable_->horizontalHeader()->setStretchLastSection(false);
-    // Первые две колонки растягиваются
     itemsTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     itemsTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    // Колонки с кнопками - фиксированная ширина
     itemsTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     itemsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     itemsTable_->setColumnWidth(2, 40);
@@ -56,7 +51,6 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     itemsTable_->setSelectionMode(QAbstractItemView::NoSelection);
     root->addWidget(itemsTable_);
 
-    // Add item section
     auto* addSection = new QHBoxLayout();
     addItemName_ = new QLineEdit(this);
     addItemName_->setPlaceholderText("product name");
@@ -70,7 +64,6 @@ EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent
     addSection->addWidget(addItemBtn_);
     root->addLayout(addSection);
 
-    // Dialog buttons
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     root->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -91,14 +84,12 @@ void EditOrderDialog::setProductService(ProductService* productSvc) {
 void EditOrderDialog::setupCompleters() {
     QStringList productNames;
     
-    // Если ProductService доступен, используем его
     if (productSvc_) {
         const auto& products = productSvc_->all();
         for (const auto& kv : products) {
             productNames << qs(kv.second.name);
         }
     } else {
-        // Иначе используем список продуктов из OrderService (price map)
         const auto& prices = svc_.price();
         QSet<QString> productSet;
         for (const auto& kv : prices) {
@@ -109,7 +100,6 @@ void EditOrderDialog::setupCompleters() {
     
     productNames.sort(Qt::CaseInsensitive);
     
-    // Создаем или обновляем completer для добавления товара
     if (addItemCompleter_) {
         delete addItemCompleter_;
     }
@@ -124,7 +114,6 @@ void EditOrderDialog::refreshItemsTable() {
     Order* o = svc_.findById(orderId_);
     if (!o) return;
     
-    // Обновляем статус в комбобоксе
     int statusIndex = statusCombo_->findText(qs(o->status));
     if (statusIndex >= 0) {
         statusCombo_->setCurrentIndex(statusIndex);
@@ -136,7 +125,6 @@ void EditOrderDialog::refreshItemsTable() {
     
     int row = 0;
     for (const auto& kv : o->items) {
-        // Получаем имя продукта (может быть в lowercase в items)
         std::string displayName = kv.first;
         if (productSvc_) {
             const Product* prod = productSvc_->findProduct(kv.first);
@@ -145,17 +133,14 @@ void EditOrderDialog::refreshItemsTable() {
             }
         }
         
-        // Product name
         auto* nameItem = new QTableWidgetItem(qs(displayName));
         nameItem->setTextAlignment(Qt::AlignCenter);
         itemsTable_->setItem(row, 0, nameItem);
         
-        // Quantity
         auto* qtyItem = new QTableWidgetItem(QString::number(kv.second));
         qtyItem->setTextAlignment(Qt::AlignCenter);
         itemsTable_->setItem(row, 1, qtyItem);
         
-        // Edit button
         auto* editBtn = new QPushButton("⚙️", this);
         editBtn->setStyleSheet(
             "QPushButton {"
@@ -179,7 +164,6 @@ void EditOrderDialog::refreshItemsTable() {
             onEditItem(itemKey, currentQty);
         });
         
-        // Delete button
         auto* deleteBtn = new QPushButton("❌", this);
         deleteBtn->setStyleSheet(
             "QPushButton {"
@@ -203,7 +187,6 @@ void EditOrderDialog::refreshItemsTable() {
             onDeleteItem(itemKey);
         });
         
-        // Обёртки для центрирования кнопок
         auto* editWidget = new QWidget(this);
         auto* editLayout = new QHBoxLayout(editWidget);
         editLayout->setAlignment(Qt::AlignCenter);
@@ -274,7 +257,6 @@ void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
         Order* o = orderOrWarn();
         if (!o) return;
         
-        // Создаем диалог для редактирования количества
         QDialog* editDialog = new QDialog(this);
         editDialog->setWindowTitle("Edit quantity");
         auto* layout = new QVBoxLayout(editDialog);
@@ -304,12 +286,10 @@ void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
                     return;
                 }
                 
-                // Удаляем старый товар и добавляем с новым количеством
                 int diff = newQty - currentQty;
                 if (diff > 0) {
                     svc_.addItem(*o, itemKey, diff);
                 } else {
-                    // Уменьшаем количество
                     svc_.removeItem(*o, itemKey);
                     if (newQty > 0) {
                         svc_.addItem(*o, itemKey, newQty);

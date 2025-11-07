@@ -54,29 +54,23 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
     auto it = price_.find(key);
     if (it == price_.end()) throw NotFoundException("item not found in product base");
     
-    // Всегда проверяем наличие на складе для неотмененных заказов
     if (o.status != "canceled") {
         if (!productService_) {
             throw ValidationException("product service not initialized");
         }
         
-        // Проверяем только новое количество, которое добавляем
-        // (если товар уже есть в заказе, его количество уже снято со склада)
         int availableStock = productService_->getStock(key);
         if (availableStock < qty) {
             throw ValidationException("not enough stock. Available: " + std::to_string(availableStock) + 
                                       ", needed: " + std::to_string(qty));
         }
         
-        // Уменьшаем количество на складе (внутри decreaseStock есть дополнительная проверка)
         try {
             productService_->decreaseStock(key, qty);
             productService_->save();
         } catch (const ValidationException& e) {
-            // Если не хватает товара (хотя мы проверили), выбрасываем исключение
             throw;
         } catch (const NotFoundException& e) {
-            // Если товар не найден (хотя мы проверили), выбрасываем исключение
             throw ValidationException("product not found: " + key);
         }
     }
@@ -96,7 +90,6 @@ void OrderService::removeItem(Order& o, const std::string& name) {
     int qty = it->second;
     o.items.erase(it);
     
-    // Возвращаем товар на склад только если заказ не отменен
     if (o.status != "canceled" && productService_) {
         productService_->increaseStock(key, qty);
         productService_->save();
@@ -136,19 +129,15 @@ void OrderService::setStatus(Order& o, const std::string& s) {
     std::string oldStatus = o.status;
     o.status = s;
     
-    // Обработка изменения статуса для работы со складом
     if (productService_) {
         if (oldStatus == "canceled" && s != "canceled") {
-            // Возврат заказа из отмены - снимаем товары со склада
             try {
                 removeItemsFromStock(o);
             } catch (const ValidationException& e) {
-                // Если не хватает товара, возвращаем статус обратно
                 o.status = oldStatus;
                 throw;
             }
         } else if (oldStatus != "canceled" && s == "canceled") {
-            // Отмена заказа - возвращаем товары на склад
             returnItemsToStock(o);
         }
     }
@@ -182,7 +171,6 @@ void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
     
     bool changed = false;
     for (auto& order : data_) {
-        // Проверяем, содержит ли заказ этот товар
         if (order.items.find(key) != order.items.end()) {
             double oldTotal = order.total;
             order.total = order.calcTotal(price_);
@@ -216,13 +204,6 @@ void OrderService::load() {
         Order c = o;
         c.total = c.calcTotal(price_);
         c.total = std::round(c.total * 100.0) / 100.0;
-        
-        // Синхронизируем склад: для неотмененных заказов товары должны быть сняты со склада
-        // Если товаров нет на складе, но они есть в заказе - это нормально (они уже сняты)
-        // Но мы не можем автоматически снять их, так как это может привести к отрицательным значениям
-        // Поэтому просто проверяем, что если товар есть в заказе и заказ не отменен, 
-        // то он должен быть снят со склада (но мы не делаем это автоматически при загрузке,
-        // чтобы не сломать существующие данные)
         
         data_.push_back(c);
         nextId_ = std::max(nextId_, c.id + 1);

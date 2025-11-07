@@ -27,7 +27,6 @@ AddOrderDialog::AddOrderDialog(OrderService& svc, QWidget* parent)
 }
 
 void AddOrderDialog::setupCompleter() {
-    // Получаем список всех уникальных клиентов
     QSet<QString> clientSet;
     const auto& orders = svc_.all();
     for (const auto& order : orders) {
@@ -37,7 +36,6 @@ void AddOrderDialog::setupCompleter() {
     QStringList clientNames = clientSet.values();
     clientNames.sort(Qt::CaseInsensitive);
     
-    // Создаем completer для имени клиента
     if (clientCompleter_) {
         delete clientCompleter_;
     }

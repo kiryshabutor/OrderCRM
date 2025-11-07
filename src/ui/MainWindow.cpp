@@ -47,11 +47,9 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
     
-    // Create tab widget
     tabs_ = new QTabWidget(this);
     root->addWidget(tabs_);
     
-    // Orders tab
     auto* ordersTab = new QWidget(this);
     auto* ordersLayout = new QHBoxLayout(ordersTab);
 
@@ -69,19 +67,17 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     table_->setColumnCount(7);
     table_->setHorizontalHeaderLabels({"ID","Client","Items","Status","Total","Created At",""});
     table_->horizontalHeader()->setStretchLastSection(false);
-    // Все колонки растягиваются, кроме последней с кнопкой
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-    // Колонка с кнопкой редактирования - фиксированная ширина
     table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
     table_->setColumnWidth(6, 40);
     table_->setWordWrap(true);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    table_->setSelectionMode(QAbstractItemView::NoSelection); // Запрещаем выделение строк
+    table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setSortingEnabled(true);
     left->addWidget(table_);
 
@@ -93,7 +89,6 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     actionRow->addStretch();
     left->addLayout(actionRow);
 
-    // Right panel - Filters
     auto* right = new QVBoxLayout();
     auto* filterLabel = new QLabel("Filters", this);
     filterLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
@@ -157,7 +152,7 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     right->addLayout(filterForm);
     
     clearFilterBtn_ = new QPushButton("Clear all filters", this);
-    clearFilterBtn_->setEnabled(false); // По умолчанию неактивна
+    clearFilterBtn_->setEnabled(false);
     clearFilterBtn_->setStyleSheet(
         "QPushButton:disabled {"
         "background-color: #9E9E9E;"
@@ -169,10 +164,8 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     );
     right->addWidget(clearFilterBtn_);
     
-    // Отступ между фильтрами и статистикой
     right->addSpacing(20);
     
-    // Statistics panel
     auto* statsLabel = new QLabel("Statistics", this);
     statsLabel->setStyleSheet("font-weight: bold; font-size: 14px; margin-top: 10px;");
     right->addWidget(statsLabel);
@@ -201,25 +194,21 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     ordersLayout->addLayout(right, 1);
     tabs_->addTab(ordersTab, "Orders");
     
-    // Products tab
     auto* productsTab = new QWidget(this);
     auto* productsLayout = new QHBoxLayout(productsTab);
     
-    // Left side - Products table
     auto* productsLeft = new QVBoxLayout();
     productTable_ = new QTableWidget(this);
     productTable_->setColumnCount(5);
     productTable_->setHorizontalHeaderLabels({"Product","Price","Stock","",""});
     productTable_->horizontalHeader()->setStretchLastSection(false);
-    // Первые три колонки растягиваются
     productTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     productTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     productTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
-    // Колонки с кнопками - фиксированная ширина по размеру кнопок
     productTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     productTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    productTable_->setColumnWidth(3, 40); // Ширина кнопки редактирования
-    productTable_->setColumnWidth(4, 40); // Ширина кнопки удаления
+    productTable_->setColumnWidth(3, 40);
+    productTable_->setColumnWidth(4, 40);
     productTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     productTable_->setSelectionMode(QAbstractItemView::NoSelection);
     productTable_->setSortingEnabled(true);
@@ -231,7 +220,6 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     prodButtons->addStretch();
     productsLeft->addLayout(prodButtons);
     
-    // Right side - Statistics
     auto* productsRight = new QVBoxLayout();
     auto* productStatsLabel = new QLabel("Product Statistics", this);
     productStatsLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
@@ -259,14 +247,12 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     
     setCentralWidget(central);
 
-    // Connect signals
     connect(addOrderBtn_, &QPushButton::clicked, this, &MainWindow::onAddOrder);
     connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onOpenReportDialog);
     connect(openChartsBtn_, &QPushButton::clicked, this, &MainWindow::onOpenStatistics);
     connect(clearFilterBtn_, &QPushButton::clicked, this, &MainWindow::onClearFilter);
     connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
 
-    // Connect filter controls
     connect(clientFilterEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
     connect(statusFilterCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
     connect(minTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
@@ -285,7 +271,7 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     connect(toDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
 
     setupCompleters();
-    showMaximized(); // Fullscreen mode
+    showMaximized();
     refreshTable();
     refreshProducts();
     updateStatistics();
@@ -405,7 +391,6 @@ void MainWindow::refreshTable() {
             auto* createdCell = new QTableWidgetItem(createdAtStr);
             createdCell->setTextAlignment(Qt::AlignCenter);
             
-            // Кнопка редактирования в ячейке таблицы (обёрнута в виджет для центрирования)
             auto* editBtn = new QPushButton("⚙️", this);
             editBtn->setStyleSheet(
                 "QPushButton {"
@@ -439,7 +424,6 @@ void MainWindow::refreshTable() {
                 updateStatistics();
             });
             
-            // Обёртка для центрирования кнопки
             auto* widgetContainer = new QWidget(this);
             auto* layout = new QHBoxLayout(widgetContainer);
             layout->setContentsMargins(0, 0, 0, 0);
@@ -472,7 +456,6 @@ void MainWindow::refreshTable() {
     int foundCount = rows.size();
     if (filterActive) {
         titleLabel_->setText(QString("Filtered Table (%1 orders)").arg(foundCount));
-        // Активируем кнопку и делаем её красной когда фильтры есть
         clearFilterBtn_->setEnabled(true);
         clearFilterBtn_->setStyleSheet(
             "QPushButton {"
@@ -492,7 +475,6 @@ void MainWindow::refreshTable() {
         );
     } else {
         titleLabel_->setText(QString("Main Table (%1 orders)").arg((int)svc_.all().size()));
-        // Деактивируем кнопку когда фильтров нет
         clearFilterBtn_->setEnabled(false);
         clearFilterBtn_->setStyleSheet(
             "QPushButton:disabled {"
@@ -509,12 +491,10 @@ void MainWindow::refreshTable() {
     titleLabel_->update();
     updateStatistics();
     
-    // Обновляем окно статистики, если оно открыто
     if (statisticsWindow_ && statisticsWindow_->isVisible()) {
         statisticsWindow_->refreshStatistics();
     }
     
-    // Обновляем автодополнение клиентов (может появиться новый клиент)
     setupCompleters();
 }
 
@@ -522,14 +502,12 @@ void MainWindow::refreshTable() {
 void MainWindow::resizeEvent(QResizeEvent* event) {
     QMainWindow::resizeEvent(event);
     if (table_) {
-        // Колонки таблицы заказов растягиваются автоматически, только высота строк нужна
         table_->resizeRowsToContents();
         for (int row = 0; row < table_->rowCount(); ++row) {
             int h = table_->rowHeight(row);
             table_->setRowHeight(row, h + 8);
         }
     }
-    // Product table columns are set to stretch automatically, no need to resize manually
 }
 
 
@@ -581,7 +559,6 @@ void MainWindow::onOpenReportDialog() {
     out.setRealNumberNotation(QTextStream::FixedNotation);
     out.setRealNumberPrecision(2);
 
-    // Заголовок отчета
     out << "Order Report: " << base << " [" << ts << "]\n";
     out << "Scope: " << (dlg.scopeFiltered() ? "Current filter" : "All orders") << "\n";
     
@@ -602,7 +579,6 @@ void MainWindow::onOpenReportDialog() {
     out << "Orders: " << rows.size() << "\n";
     out << "\n";
 
-    // Заголовки таблицы заказов
     out << "Order ID,Client,Status,Total,Created At,Items\n";
 
     double totalSum = 0.0;
@@ -614,7 +590,6 @@ void MainWindow::onOpenReportDialog() {
         statusAgg[qs(o.status)].first += 1;
         statusAgg[qs(o.status)].second += o.total;
 
-        // Формируем строку с товарами
         QString itemsStr;
         bool firstItem = true;
         for (auto& kv : o.items) {
@@ -628,18 +603,17 @@ void MainWindow::onOpenReportDialog() {
         }
         if (itemsStr.isEmpty()) itemsStr = "-";
 
-        // Экранируем кавычки и запятые в CSV
         QString client = qs(o.client);
-        client.replace("\"", "\"\""); // Экранируем двойные кавычки
+        client.replace("\"", "\"\"");
         if (client.contains(',') || client.contains('"') || client.contains('\n')) {
             client = "\"" + client + "\"";
         }
 
         QString status = qs(o.status);
         QString createdAt = qs(o.createdAt);
-        createdAt.replace("T", " "); // Заменяем T на пробел для читаемости
+        createdAt.replace("T", " ");
 
-        itemsStr.replace("\"", "\"\""); // Экранируем двойные кавычки
+        itemsStr.replace("\"", "\"\"");
         if (itemsStr.contains(',') || itemsStr.contains('"') || itemsStr.contains('\n')) {
             itemsStr = "\"" + itemsStr + "\"";
         }
@@ -652,7 +626,6 @@ void MainWindow::onOpenReportDialog() {
             << itemsStr << "\n";
     }
 
-    // Сводка
     out << "\n";
     if (dlg.includeSummarySection()) {
         out << "Summary:\n";
@@ -664,7 +637,6 @@ void MainWindow::onOpenReportDialog() {
     QMessageBox::information(this, "report", QString("Excel report created: %1").arg(fileName));
 }
 
-// Products methods
 static double parsePrice(const QString& input) {
     QString s = input.trimmed();
     if (s.isEmpty()) throw ValidationException("price cannot be empty");
@@ -699,7 +671,6 @@ void MainWindow::refreshProducts() {
         productTable_->setItem(i, 1, priceCell);
         productTable_->setItem(i, 2, stockCell);
         
-        // Edit button
         auto* editBtn = new QPushButton("⚙️", this);
         editBtn->setStyleSheet(
             "QPushButton {"
@@ -723,7 +694,6 @@ void MainWindow::refreshProducts() {
             onEditProduct(productKey, productName);
         });
         
-        // Delete button
         auto* deleteBtn = new QPushButton("❌", this);
         deleteBtn->setStyleSheet(
             "QPushButton {"
@@ -747,7 +717,6 @@ void MainWindow::refreshProducts() {
             onDeleteProduct(productKey, productName);
         });
         
-        // Wrappers for centering
         auto* editWidget = new QWidget(this);
         auto* editLayout = new QHBoxLayout(editWidget);
         editLayout->setAlignment(Qt::AlignCenter);
@@ -951,13 +920,11 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
 void MainWindow::updateProductStatistics() {
     const auto& products = productSvc_.all();
     
-    // Convert to vector for sorting
     std::vector<std::pair<std::string, Product>> productsVec;
     for (const auto& kv : products) {
         productsVec.push_back({kv.first, kv.second});
     }
     
-    // Sort by stock (lowest first)
     std::sort(productsVec.begin(), productsVec.end(), 
         [](const auto& a, const auto& b) { return a.second.stock < b.second.stock; });
     
@@ -967,7 +934,6 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsLowStockLabel_->setText(lowStock);
     
-    // Sort by stock (highest first)
     std::sort(productsVec.begin(), productsVec.end(), 
         [](const auto& a, const auto& b) { return a.second.stock > b.second.stock; });
     
@@ -977,7 +943,6 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsHighStockLabel_->setText(highStock);
     
-    // Sort by price (highest first)
     std::sort(productsVec.begin(), productsVec.end(), 
         [](const auto& a, const auto& b) { return a.second.price > b.second.price; });
     
@@ -988,7 +953,6 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsExpensiveLabel_->setText(expensive);
     
-    // Sort by price (lowest first)
     std::sort(productsVec.begin(), productsVec.end(), 
         [](const auto& a, const auto& b) { return a.second.price < b.second.price; });
     
@@ -999,7 +963,6 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsCheapLabel_->setText(cheap);
     
-    // Total statistics
     int totalCount = products.size();
     double totalValue = 0.0;
     for (const auto& kv : products) {
@@ -1075,7 +1038,6 @@ void MainWindow::onClearFilter() {
 }
 
 void MainWindow::setupCompleters() {
-    // Получаем список всех уникальных клиентов
     QSet<QString> clientSet;
     const auto& orders = svc_.all();
     for (const auto& order : orders) {
@@ -1085,9 +1047,7 @@ void MainWindow::setupCompleters() {
     QStringList clientNames = clientSet.values();
     clientNames.sort(Qt::CaseInsensitive);
     
-    // Создаем или обновляем модель и completer для фильтра клиента
     if (!clientFilterModel_) {
-        // Первый раз создаем модель и completer
         clientFilterModel_ = new QStringListModel(clientNames, this);
         clientFilterCompleter_ = new QCompleter(clientFilterModel_, this);
         clientFilterCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
@@ -1095,7 +1055,6 @@ void MainWindow::setupCompleters() {
         clientFilterCompleter_->setFilterMode(Qt::MatchContains);
         clientFilterEdit_->setCompleter(clientFilterCompleter_);
     } else {
-        // Обновляем существующую модель данными
         clientFilterModel_->setStringList(clientNames);
     }
 }
