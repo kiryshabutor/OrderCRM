@@ -42,8 +42,18 @@ private:
     };
     StatusStats stats_;
     
+    struct RevenueBarParams {
+        double revenue{0.0};
+        QColor color;
+        QString statusName;
+        int x{0};
+        int baseY{0};
+        int barWidth{0};
+        int chartHeight{0};
+        double maxRevenue{1.0};
+    };
+    
     void drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow = true) const;
-    void drawAnimatedRevenueBar(QPainter& painter, double revenue, const QColor& color, const QString& statusName, 
-                                 int x, int baseY, int barWidth, int chartHeight, double maxRevenue) const;
+    void drawAnimatedRevenueBar(QPainter& painter, const RevenueBarParams& params) const;
 };
 

@@ -31,8 +31,11 @@ int main(int argc, char *argv[]) {
     ProductService productSvc(productRepo);
     try { 
         productSvc.load(); 
+    } catch (const std::exception& e) {
+        // Ignore loading errors on startup - file may not exist yet
+        (void)e;
     } catch (...) {
-        // Ignore loading errors on startup
+        // Ignore any other loading errors on startup
     }
 
     OrderService orderSvc(orderRepo);
@@ -40,8 +43,11 @@ int main(int argc, char *argv[]) {
     orderSvc.setPrices(productSvc.all());
     try { 
         orderSvc.load(); 
+    } catch (const std::exception& e) {
+        // Ignore loading errors on startup - file may not exist yet
+        (void)e;
     } catch (...) {
-        // Ignore loading errors on startup
+        // Ignore any other loading errors on startup
     }
 
     MainWindow w(orderSvc, productSvc);

@@ -69,8 +69,8 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
         try {
             productService_->decreaseStock(key, qty);
             productService_->save();
-        } catch (const ValidationException&) {
-            throw;
+        } catch (const ValidationException& e) {
+            throw; // Re-throw validation exceptions as-is
         } catch (const NotFoundException&) {
             throw ValidationException("product not found: " + key);
         }
@@ -146,7 +146,7 @@ void OrderService::setStatus(Order& o, const std::string& s) {
 }
 
 Order* OrderService::findById(int id) {
-    return find_if(data_, [id](Order& o) { return o.id == id; });
+    return find_if(data_, [id](const Order& o) { return o.id == id; });
 }
 
 const Order* OrderService::findById(int id) const {

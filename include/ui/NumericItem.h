@@ -15,10 +15,4 @@ public:
         }
         return QTableWidgetItem::operator<(other) ? std::partial_ordering::less : std::partial_ordering::greater;
     }
-    bool operator<(const QTableWidgetItem& other) const override {
-        if (const auto* o = dynamic_cast<const NumericItem*>(&other); o) {
-            return v_ < o->v_;
-        }
-        return QTableWidgetItem::operator<(other);
-    }
 };
