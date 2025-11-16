@@ -51,7 +51,7 @@ void AddOrderDialog::onAdd() {
         std::string client = formatName(ss(clientEdit_->text()));
         ValidationService V;
         V.validate_client_name(client);
-        Order& o = svc_.create(client);
+        const Order& o = svc_.create(client);
         createdId_ = o.id;
         accept();
     } catch (const CustomException& e) {

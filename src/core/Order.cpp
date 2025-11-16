@@ -20,7 +20,7 @@ static std::string now_iso8601() {
     return os.str();
 }
 
-double Order::calcTotal(const std::map<std::string, double>& priceList) const {
+double Order::calcTotal(const std::map<std::string, double, std::less<>>& priceList) const {
     double s = 0.0;
     for (auto& kv : items) {
         auto it = priceList.find(kv.first);

@@ -4,7 +4,7 @@
 
 ProductService::ProductService(IProductRepository& repo) : repo_(repo) {}
 
-const std::map<std::string, Product>& ProductService::all() const {
+const std::map<std::string, Product, std::less<>>& ProductService::all() const {
     return products_;
 }
 
@@ -24,13 +24,13 @@ const Product* ProductService::findProduct(const std::string& name) const {
 
 void ProductService::load() {
     products_ = repo_.load();
-    std::map<std::string, Product> normalized;
-    for (auto& kv : products_) {
-        Product p = kv.second;
+    std::map<std::string, Product, std::less<>> normalized;
+    for (const auto& [key, product] : products_) {
+        Product p = product;
         p.price = std::round(p.price * 100.0) / 100.0;
         if (p.price > 0.0) {
             if (p.stock < 0) p.stock = 0;
-            normalized[kv.first] = p;
+            normalized[key] = p;
         }
     }
     products_.swap(normalized);

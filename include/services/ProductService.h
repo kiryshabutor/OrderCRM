@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <string>
+#include <functional>
 #include "include/core/IProductRepository.h"
 #include "include/core/Product.h"
 #include "include/Errors/CustomExceptions.h"
@@ -8,14 +9,14 @@
 
 class ProductService {
 private:
-    std::map<std::string, Product> products_;
+    std::map<std::string, Product, std::less<>> products_;
     IProductRepository& repo_;
     ValidationService V_;
 
 public:
     explicit ProductService(IProductRepository& repo);
 
-    const std::map<std::string, Product>& all() const;
+    const std::map<std::string, Product, std::less<>>& all() const;
     Product* findProduct(const std::string& name);
     const Product* findProduct(const std::string& name) const;
 

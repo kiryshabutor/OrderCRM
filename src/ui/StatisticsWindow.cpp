@@ -19,11 +19,12 @@
 #include <cmath>
 
 StatisticsWindow::StatisticsWindow(OrderService& svc, QWidget* parent)
-    : QMainWindow(parent), svc_(svc), animationProgress_(0.0) {
+    : QMainWindow(parent), svc_(svc) {
     setWindowTitle("Statistics and Charts");
     
     auto* central = new QWidget(this);
     auto* root = new QVBoxLayout(central);
+    Q_UNUSED(root); // Layout is managed by Qt's parent-child relationship
 
     updateStatistics();
     
@@ -79,7 +80,7 @@ void StatisticsWindow::onAnimationTick() {
     update();
 }
 
-void StatisticsWindow::drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow) {
+void StatisticsWindow::drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow) const {
     if (rect.isEmpty()) return;
     
     if (withShadow) {
@@ -116,8 +117,7 @@ void StatisticsWindow::paintEvent(QPaintEvent* event) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setRenderHint(QPainter::SmoothPixmapTransform);
     
-    int totalOrders = stats_.newCount + stats_.inProgressCount + stats_.doneCount + stats_.canceledCount;
-    if (totalOrders == 0) {
+    if (int totalOrders = stats_.newCount + stats_.inProgressCount + stats_.doneCount + stats_.canceledCount; totalOrders == 0) {
         painter.setPen(QPen(Qt::white));
         painter.setFont(QFont("Arial", 14, QFont::Normal));
         painter.drawText(rect(), Qt::AlignCenter, "No orders to display");
@@ -145,7 +145,7 @@ void StatisticsWindow::paintEvent(QPaintEvent* event) {
     auto drawAnimatedBar = [&](int count, const QColor& color, const QString& label) {
         if (count < 0) return;
         int targetHeight = maxCount > 0 ? (count * chartHeight) / maxCount : 0;
-        int animatedHeight = (int)(targetHeight * animationProgress_);
+        auto animatedHeight = static_cast<int>(targetHeight * animationProgress_);
         QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
         
         if (!barRect.isEmpty()) {
@@ -182,8 +182,8 @@ void StatisticsWindow::paintEvent(QPaintEvent* event) {
     
     auto drawAnimatedRevenueBar = [&](double revenue, const QColor& color, const QString& statusName) {
         if (revenue < 0) return;
-        int targetHeight = maxRevenue > 0 ? (int)((revenue * chartHeight) / maxRevenue) : 0;
-        int animatedHeight = (int)(targetHeight * animationProgress_);
+        int targetHeight = maxRevenue > 0 ? static_cast<int>((revenue * chartHeight) / maxRevenue) : 0;
+        auto animatedHeight = static_cast<int>(targetHeight * animationProgress_);
         QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
         
         if (!barRect.isEmpty()) {

@@ -40,27 +40,27 @@ Order& OrderService::create(const std::string& client) {
     return data_[data_.size() - 1];
 }
 
-void OrderService::setPrices(const std::map<std::string, Product>& products) {
+void OrderService::setPrices(const std::map<std::string, Product, std::less<>>& products) {
     price_.clear();
-    for (const auto& kv : products) {
-        price_[kv.first] = kv.second.price;
+    for (const auto& [key, product] : products) {
+        price_[key] = product.price;
     }
 }
 
 void OrderService::addItem(Order& o, const std::string& item, int qty) {
     if (qty <= 0) throw ValidationException("qty must be positive");
     std::string key = item;
-    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
-    auto it = price_.find(key);
-    if (it == price_.end()) throw NotFoundException("item not found in product base");
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
+    if (auto it = price_.find(key); it == price_.end()) {
+        throw NotFoundException("item not found in product base");
+    }
     
     if (o.status != "canceled") {
         if (!productService_) {
             throw ValidationException("product service not initialized");
         }
         
-        int availableStock = productService_->getStock(key);
-        if (availableStock < qty) {
+        if (int availableStock = productService_->getStock(key); availableStock < qty) {
             throw ValidationException("not enough stock. Available: " + std::to_string(availableStock) + 
                                       ", needed: " + std::to_string(qty));
         }
@@ -167,11 +167,11 @@ double OrderService::revenue() const {
 
 void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
     std::string key = productKey;
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), ::tolower);
     
     bool changed = false;
     for (auto& order : data_) {
-        if (order.items.find(key) != order.items.end()) {
+        if (order.items.contains(key)) {
             double oldTotal = order.total;
             order.total = order.calcTotal(price_);
             order.total = std::round(order.total * 100.0) / 100.0;

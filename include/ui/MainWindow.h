@@ -61,9 +61,9 @@ private:
     QLabel* productStatsTotalCountLabel_;
     QLabel* productStatsTotalValueLabel_;
 
-    StatisticsWindow* statisticsWindow_;
-    QCompleter* clientFilterCompleter_;
-    QStringListModel* clientFilterModel_;
+    StatisticsWindow* statisticsWindow_{nullptr};
+    QCompleter* clientFilterCompleter_{nullptr};
+    QStringListModel* clientFilterModel_{nullptr};
 
     QString activeClientFilter_;
     QString activeStatusFilter_;
@@ -92,7 +92,8 @@ private slots:
     void updateProductStatistics();
     void onEditProduct(const std::string& productKey, const std::string& productName);
     void onDeleteProduct(const std::string& productKey, const std::string& productName);
-    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds);
+    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const;
+    void cancelOrderSafely(int orderId);
 
 public:
     void refreshTable();

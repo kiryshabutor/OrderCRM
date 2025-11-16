@@ -12,7 +12,7 @@ class EditOrderDialog : public QDialog {
     Q_OBJECT
 private:
     OrderService& svc_;
-    ProductService* productSvc_;
+    ProductService* productSvc_{nullptr};
     int orderId_;
     QLineEdit* idEdit_;
     QComboBox* statusCombo_;
@@ -20,13 +20,14 @@ private:
     QLineEdit* addItemName_;
     QLineEdit* addQty_;
     QPushButton* addItemBtn_;
-    QCompleter* addItemCompleter_;
+    QCompleter* addItemCompleter_{nullptr};
 
     Order* orderOrWarn();
     void setupCompleters();
     void refreshItemsTable();
     void onEditItem(const std::string& itemKey, int currentQty);
     void onDeleteItem(const std::string& itemKey);
+    void updateItemQuantity(Order* order, const std::string& itemKey, int newQty, int currentQty);
 
 private slots:
     void onApplyStatus();

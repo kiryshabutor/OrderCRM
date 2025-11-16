@@ -13,7 +13,7 @@ class StatisticsWindow : public QMainWindow {
 private:
     OrderService& svc_;
     QTimer* animationTimer_;
-    double animationProgress_;
+    double animationProgress_{0.0};
 
     void updateStatistics();
 
@@ -42,6 +42,6 @@ private:
     };
     StatusStats stats_;
     
-    void drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow = true);
+    void drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow = true) const;
 };
 

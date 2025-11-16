@@ -2,6 +2,7 @@
 #include "include/core/IProductRepository.h"
 #include <map>
 #include <string>
+#include <functional>
 
 class TxtProductRepository : public IProductRepository {
 private:
@@ -9,6 +10,6 @@ private:
 public:
     explicit TxtProductRepository(std::string f) : file_(std::move(f)) {}
 
-    std::map<std::string, Product> load() override;
-    void save(const std::map<std::string, Product>& data) override;
+    std::map<std::string, Product, std::less<>> load() override;
+    void save(const std::map<std::string, Product, std::less<>>& data) override;
 };

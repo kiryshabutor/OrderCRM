@@ -10,7 +10,7 @@ inline std::string ss(const QString& s) { return s.toUtf8().constData(); }
 inline std::string formatName(const std::string& name) {
     if (name.empty()) return name;
     std::string result = name;
-    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    std::ranges::transform(result, result.begin(), ::tolower);
     if (!result.empty()) {
         result[0] = std::toupper(result[0]);
     }

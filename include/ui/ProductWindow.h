@@ -14,13 +14,14 @@ private:
 
     QTableWidget* productTable_;
     QPushButton* addProductBtn_;
-    QCompleter* productNameCompleter_;
+    QCompleter* productNameCompleter_{nullptr};
 
     void refreshProducts();
     void setupCompleters();
     void onEditProduct(const std::string& productKey, const std::string& productName);
     void onDeleteProduct(const std::string& productKey, const std::string& productName);
-    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds);
+    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const;
+    void cancelOrderSafely(int orderId);
 
 private slots:
     void onAddProduct();

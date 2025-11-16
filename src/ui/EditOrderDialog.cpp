@@ -16,7 +16,7 @@
 #include <algorithm>
 
 EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent)
-    : QDialog(parent), svc_(svc), productSvc_(nullptr), orderId_(orderId), addItemCompleter_(nullptr) {
+    : QDialog(parent), svc_(svc), orderId_(orderId) {
     setWindowTitle("Edit order");
     auto* root = new QVBoxLayout(this);
 
@@ -86,14 +86,16 @@ void EditOrderDialog::setupCompleters() {
     
     if (productSvc_) {
         const auto& products = productSvc_->all();
-        for (const auto& kv : products) {
-            productNames << qs(kv.second.name);
+        for (const auto& [key, product] : products) {
+            (void)key; // unused
+            productNames << qs(product.name);
         }
     } else {
         const auto& prices = svc_.price();
         QSet<QString> productSet;
-        for (const auto& kv : prices) {
-            productSet.insert(qs(kv.first));
+        for (const auto& [key, price] : prices) {
+            (void)price; // unused
+            productSet.insert(qs(key));
         }
         productNames = productSet.values();
     }
@@ -111,11 +113,10 @@ void EditOrderDialog::setupCompleters() {
 }
 
 void EditOrderDialog::refreshItemsTable() {
-    Order* o = svc_.findById(orderId_);
+    const Order* o = svc_.findById(orderId_);
     if (!o) return;
     
-    int statusIndex = statusCombo_->findText(qs(o->status));
-    if (statusIndex >= 0) {
+    if (int statusIndex = statusCombo_->findText(qs(o->status)); statusIndex >= 0) {
         statusCombo_->setCurrentIndex(statusIndex);
     }
     
@@ -124,10 +125,10 @@ void EditOrderDialog::refreshItemsTable() {
     itemsTable_->setRowCount(static_cast<int>(o->items.size()));
     
     int row = 0;
-    for (const auto& kv : o->items) {
-        std::string displayName = kv.first;
+    for (const auto& [itemKey, qty] : o->items) {
+        std::string displayName = itemKey;
         if (productSvc_) {
-            const Product* prod = productSvc_->findProduct(kv.first);
+            const Product* prod = productSvc_->findProduct(itemKey);
             if (prod) {
                 displayName = prod->name;
             }
@@ -137,7 +138,7 @@ void EditOrderDialog::refreshItemsTable() {
         nameItem->setTextAlignment(Qt::AlignCenter);
         itemsTable_->setItem(row, 0, nameItem);
         
-        auto* qtyItem = new QTableWidgetItem(QString::number(kv.second));
+        auto* qtyItem = new QTableWidgetItem(QString::number(qty));
         qtyItem->setTextAlignment(Qt::AlignCenter);
         itemsTable_->setItem(row, 1, qtyItem);
         
@@ -160,7 +161,7 @@ void EditOrderDialog::refreshItemsTable() {
         );
         editBtn->setToolTip("Edit quantity");
         editBtn->setFixedSize(35, 25);
-        connect(editBtn, &QPushButton::clicked, this, [this, itemKey = kv.first, currentQty = kv.second]() {
+        connect(editBtn, &QPushButton::clicked, this, [this, itemKey, currentQty = qty]() {
             onEditItem(itemKey, currentQty);
         });
         
@@ -183,7 +184,7 @@ void EditOrderDialog::refreshItemsTable() {
         );
         deleteBtn->setToolTip("Delete item");
         deleteBtn->setFixedSize(35, 25);
-        connect(deleteBtn, &QPushButton::clicked, this, [this, itemKey = kv.first]() {
+        connect(deleteBtn, &QPushButton::clicked, this, [this, itemKey]() {
             onDeleteItem(itemKey);
         });
         
@@ -252,6 +253,21 @@ void EditOrderDialog::onAddItem() {
     }
 }
 
+void EditOrderDialog::updateItemQuantity(Order* order, const std::string& itemKey, int newQty, int currentQty) {
+    try {
+        if (int diff = newQty - currentQty; diff > 0) {
+            svc_.addItem(*order, itemKey, diff);
+        } else {
+            svc_.removeItem(*order, itemKey);
+            if (newQty > 0) {
+                svc_.addItem(*order, itemKey, newQty);
+            }
+        }
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
 void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
     try {
         Order* o = orderOrWarn();
@@ -273,36 +289,23 @@ void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
         layout->addWidget(buttons);
         
         connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, qtyEdit, o, itemKey, currentQty]() {
-            try {
-                bool ok = false;
-                int newQty = qtyEdit->text().toInt(&ok);
-                if (!ok || newQty <= 0) {
-                    QMessageBox::warning(editDialog, "error", "Invalid quantity");
-                    return;
-                }
-                
-                if (newQty == currentQty) {
-                    editDialog->accept();
-                    return;
-                }
-                
-                int diff = newQty - currentQty;
-                if (diff > 0) {
-                    svc_.addItem(*o, itemKey, diff);
-                } else {
-                    svc_.removeItem(*o, itemKey);
-                    if (newQty > 0) {
-                        svc_.addItem(*o, itemKey, newQty);
-                    }
-                }
-                
-                refreshItemsTable();
-                editDialog->accept();
-                QMessageBox::information(this, "ok", "quantity updated");
-                emit dataChanged();
-            } catch (const CustomException& e) {
-                QMessageBox::warning(editDialog, "error", qs(e.what()));
+            bool ok = false;
+            int newQty = qtyEdit->text().toInt(&ok);
+            if (!ok || newQty <= 0) {
+                QMessageBox::warning(editDialog, "error", "Invalid quantity");
+                return;
             }
+            
+            if (newQty == currentQty) {
+                editDialog->accept();
+                return;
+            }
+            
+            updateItemQuantity(o, itemKey, newQty, currentQty);
+            refreshItemsTable();
+            editDialog->accept();
+            QMessageBox::information(this, "ok", "quantity updated");
+            emit dataChanged();
         });
         
         connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);

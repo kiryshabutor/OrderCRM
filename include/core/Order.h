@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <map>
+#include <functional>
 #include <ostream>
 #include <optional>
 
@@ -9,11 +10,11 @@ public:
     int id;
     std::string client;
     std::string status;
-    std::map<std::string, int> items;
+    std::map<std::string, int, std::less<>> items;
     double total;
     std::string createdAt;
 
-    double calcTotal(const std::map<std::string, double>& priceList) const;
+    double calcTotal(const std::map<std::string, double, std::less<>>& priceList) const;
 
     bool operator<(const Order& other) const { return id < other.id; }
     bool operator==(const Order& other) const { return id == other.id; }

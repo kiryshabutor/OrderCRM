@@ -1,6 +1,7 @@
 #pragma once
 #include <map>
 #include <string>
+#include <functional>
 #include <algorithm>
 #include "include/core/Order.h"
 #include "include/core/IRepository.h"
@@ -13,7 +14,7 @@ class ProductService;
 class OrderService {
 private:
     SimpleList<Order> data_;
-    std::map<std::string, double> price_;
+    std::map<std::string, double, std::less<>> price_;
     int nextId_{1};
     IRepository& repo_;
     ProductService* productService_{nullptr};
@@ -24,8 +25,8 @@ public:
     explicit OrderService(IRepository& repo) : repo_(repo) {}
 
     void setProductService(ProductService* ps) { productService_ = ps; }
-    void setPrices(const std::map<std::string, Product>& products);
-    const std::map<std::string,double>& price() const { return price_; }
+    void setPrices(const std::map<std::string, Product, std::less<>>& products);
+    const std::map<std::string, double, std::less<>>& price() const { return price_; }
 
     Order& create(const std::string& client);
     void addItem(Order& o, const std::string& name, int qty);

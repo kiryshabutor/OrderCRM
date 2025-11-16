@@ -42,7 +42,7 @@
 #include <cmath>
 
 MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent)
-    : QMainWindow(parent), svc_(svc), productSvc_(productSvc), statisticsWindow_(nullptr), clientFilterCompleter_(nullptr), clientFilterModel_(nullptr) {
+    : QMainWindow(parent), svc_(svc), productSvc_(productSvc) {
     setWindowTitle("Order Management System");
     
     auto* central = new QWidget(this);
@@ -344,15 +344,15 @@ void MainWindow::refreshTable() {
             const auto& o = *op;
             QString itemsStr;
             bool first = true;
-            for (auto& kv : o.items) {
-                auto pit = svc_.price().find(kv.first);
+            for (const auto& [itemKey, qty] : o.items) {
+                auto pit = svc_.price().find(itemKey);
                 QString priceText = (pit != svc_.price().end())
                     ? QString::number(pit->second, 'f', 2)
                     : QString("n/a");
                 if (!first) itemsStr += "\n";
                 itemsStr += QString("%1 ×%2 (%3)")
-                    .arg(qs(kv.first))
-                    .arg(kv.second)
+                    .arg(qs(itemKey))
+                    .arg(qty)
                     .arg(priceText);
                 first = false;
             }
@@ -400,8 +400,7 @@ void MainWindow::refreshTable() {
             editBtn->setToolTip("Edit order");
             editBtn->setFixedSize(35, 25);
             connect(editBtn, &QPushButton::clicked, this, [this, orderId = o.id]() {
-                const Order* order = svc_.findById(orderId);
-                if (!order) {
+                if (const Order* order = svc_.findById(orderId); !order) {
                     QMessageBox::warning(this, "error", "order not found");
                     return;
                 }
@@ -581,9 +580,7 @@ void MainWindow::refreshProducts() {
     productTable_->clearContents();
     productTable_->setRowCount((int)p.size());
     int i = 0;
-    for (auto& kv : p) {
-        const Product& prod = kv.second;
-        std::string productKey = kv.first;
+    for (const auto& [productKey, prod] : p) {
         
         auto* nameCell = new QTableWidgetItem(qs(prod.name));
         nameCell->setTextAlignment(Qt::AlignCenter);
@@ -666,11 +663,10 @@ void MainWindow::refreshProducts() {
 void MainWindow::onAddProduct() {
     AddProductDialog dlg(productSvc_, this);
     if (dlg.exec() == QDialog::Accepted) {
-        std::string addedName = dlg.addedProductName();
-        if (!addedName.empty()) {
+        if (std::string addedName = dlg.addedProductName(); !addedName.empty()) {
             svc_.setPrices(productSvc_.all());
             std::string key = addedName;
-            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            std::ranges::transform(key, key.begin(), ::tolower);
             svc_.recalculateOrdersWithProduct(key);
             svc_.save();
             refreshTable();
@@ -679,17 +675,29 @@ void MainWindow::onAddProduct() {
     }
 }
 
-bool MainWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) {
+bool MainWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const {
     affectedOrderIds.clear();
     const auto& orders = svc_.all();
     for (const auto& order : orders) {
-        if (order.status == "new" || order.status == "in_progress") {
-            if (order.items.find(productKey) != order.items.end()) {
-                affectedOrderIds.append(order.id);
-            }
+        if ((order.status == "new" || order.status == "in_progress") && order.items.contains(productKey)) {
+            affectedOrderIds.append(order.id);
         }
     }
     return !affectedOrderIds.isEmpty();
+}
+
+void MainWindow::cancelOrderSafely(int orderId) {
+    Order* order = svc_.findById(orderId);
+    if (!order) {
+        return;
+    }
+    try {
+        svc_.setStatus(*order, "canceled");
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
+                            .arg(orderId)
+                            .arg(qs(e.what())));
+    }
 }
 
 void MainWindow::onDeleteProduct(const std::string& productKey, const std::string& productName) {
@@ -707,7 +715,7 @@ void MainWindow::onDeleteProduct(const std::string& productKey, const std::strin
             msgBox.setInformativeText("What would you like to do?");
             
             QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
-            QPushButton* cancelOrdersBtn = msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+            msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
             
             msgBox.setDefaultButton(cancelBtn);
             msgBox.exec();
@@ -719,16 +727,7 @@ void MainWindow::onDeleteProduct(const std::string& productKey, const std::strin
             svc_.setProductService(&productSvc_);
             
             for (int orderId : affectedOrderIds) {
-                Order* order = svc_.findById(orderId);
-                if (order) {
-                    try {
-                        svc_.setStatus(*order, "canceled");
-                    } catch (const CustomException& e) {
-                        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
-                                            .arg(orderId)
-                                            .arg(qs(e.what())));
-                    }
-                }
+                cancelOrderSafely(orderId);
             }
             svc_.save();
         }
@@ -765,15 +764,15 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
     auto* layout = new QVBoxLayout(editDialog);
     auto* form = new QFormLayout();
     
-    QLineEdit* nameEdit = new QLineEdit(editDialog);
+    auto* nameEdit = new QLineEdit(editDialog);
     nameEdit->setText(qs(product->name));
     form->addRow("Product name:", nameEdit);
     
-    QLineEdit* priceEdit = new QLineEdit(editDialog);
+    auto* priceEdit = new QLineEdit(editDialog);
     priceEdit->setText(QString::number(product->price, 'f', 2));
     form->addRow("Price:", priceEdit);
     
-    QLineEdit* stockEdit = new QLineEdit(editDialog);
+    auto* stockEdit = new QLineEdit(editDialog);
     stockEdit->setText(QString::number(product->stock));
     stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
     form->addRow("Stock:", stockEdit);
@@ -784,7 +783,7 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
     buttons->button(QDialogButtonBox::Ok)->setText("Save");
     layout->addWidget(buttons);
     
-    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, productKey, oldName = productName]() {
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, oldName = productName]() {
         try {
             std::string newName = formatName(ss(nameEdit->text()));
             if (newName.empty()) {
@@ -816,11 +815,11 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
             if (priceChanged || nameChanged) {
                 if (nameChanged) {
                     std::string oldKey = oldName;
-                    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+                    std::ranges::transform(oldKey, oldKey.begin(), ::tolower);
                     svc_.recalculateOrdersWithProduct(oldKey);
                 }
                 std::string newKey = newName;
-                std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+                std::ranges::transform(newKey, newKey.begin(), ::tolower);
                 svc_.recalculateOrdersWithProduct(newKey);
             }
             svc_.save();
@@ -846,11 +845,11 @@ void MainWindow::updateProductStatistics() {
     const auto& products = productSvc_.all();
     
     std::vector<std::pair<std::string, Product>> productsVec;
-    for (const auto& kv : products) {
-        productsVec.push_back({kv.first, kv.second});
+    for (const auto& [key, product] : products) {
+        productsVec.emplace_back(key, product);
     }
     
-    std::sort(productsVec.begin(), productsVec.end(), 
+    std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.stock < b.second.stock; });
     
     QString lowStock = "Low Stock (Top 3):\n";
@@ -859,7 +858,7 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsLowStockLabel_->setText(lowStock);
     
-    std::sort(productsVec.begin(), productsVec.end(), 
+    std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.stock > b.second.stock; });
     
     QString highStock = "High Stock (Top 3):\n";
@@ -868,7 +867,7 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsHighStockLabel_->setText(highStock);
     
-    std::sort(productsVec.begin(), productsVec.end(), 
+    std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.price > b.second.price; });
     
     QString expensive = "Most Expensive (Top 3):\n";
@@ -878,7 +877,7 @@ void MainWindow::updateProductStatistics() {
     }
     productStatsExpensiveLabel_->setText(expensive);
     
-    std::sort(productsVec.begin(), productsVec.end(), 
+    std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.price < b.second.price; });
     
     QString cheap = "Cheapest (Top 3):\n";
@@ -890,8 +889,9 @@ void MainWindow::updateProductStatistics() {
     
     int totalCount = products.size();
     double totalValue = 0.0;
-    for (const auto& kv : products) {
-        totalValue += kv.second.price * kv.second.stock;
+    for (const auto& [key, product] : products) {
+        (void)key; // unused
+        totalValue += product.price * product.stock;
     }
     
     productStatsTotalCountLabel_->setText(QString("Total Products: %1").arg(totalCount));

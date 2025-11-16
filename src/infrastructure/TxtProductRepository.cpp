@@ -43,8 +43,8 @@ static inline int parse_int(std::string s) {
     return std::stoi(s);
 }
 
-std::map<std::string, Product> TxtProductRepository::load() {
-    std::map<std::string, Product> result;
+std::map<std::string, Product, std::less<>> TxtProductRepository::load() {
+    std::map<std::string, Product, std::less<>> result;
     std::ifstream in(file_);
     if (!in) {
         return result;
@@ -68,13 +68,13 @@ std::map<std::string, Product> TxtProductRepository::load() {
     return result;
 }
 
-void TxtProductRepository::save(const std::map<std::string, Product>& data) {
+void TxtProductRepository::save(const std::map<std::string, Product, std::less<>>& data) {
     std::ofstream out(file_);
     if (!out) throw IoException("cannot open products file for write: " + file_);
     out.setf(std::ios::fixed);
     out << std::setprecision(2);
-    for (auto& kv : data) {
-        const Product& p = kv.second;
+    for (const auto& [key, p] : data) {
+        (void)key; // unused
         out << p.name << ";" << p.price << ";" << p.stock << "\n";
     }
 }

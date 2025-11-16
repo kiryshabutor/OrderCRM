@@ -33,7 +33,7 @@ static double parsePrice(const QString& input) {
 }
 
 ProductWindow::ProductWindow(ProductService& productSvc, OrderService& orderSvc, QWidget* parent)
-    : QMainWindow(parent), productSvc_(productSvc), orderSvc_(orderSvc), productNameCompleter_(nullptr) {
+    : QMainWindow(parent), productSvc_(productSvc), orderSvc_(orderSvc) {
     setWindowTitle("Products");
     
     auto* central = new QWidget(this);
@@ -74,9 +74,7 @@ void ProductWindow::refreshProducts() {
     productTable_->clearContents();
     productTable_->setRowCount((int)p.size());
     int i = 0;
-    for (auto& kv : p) {
-        const Product& prod = kv.second;
-        std::string productKey = kv.first;
+    for (const auto& [productKey, prod] : p) {
         
         auto* nameCell = new QTableWidgetItem(qs(prod.name));
         nameCell->setTextAlignment(Qt::AlignCenter);
@@ -167,16 +165,16 @@ void ProductWindow::refreshProducts() {
 }
 
 void ProductWindow::setupCompleters() {
+    // Completers are not needed for this window's current implementation
 }
 
 void ProductWindow::onAddProduct() {
     AddProductDialog dlg(productSvc_, this);
     if (dlg.exec() == QDialog::Accepted) {
-        std::string addedName = dlg.addedProductName();
-        if (!addedName.empty()) {
+        if (std::string addedName = dlg.addedProductName(); !addedName.empty()) {
             orderSvc_.setPrices(productSvc_.all());
             std::string key = addedName;
-            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            std::ranges::transform(key, key.begin(), ::tolower);
             orderSvc_.recalculateOrdersWithProduct(key);
             orderSvc_.save();
             emit ordersChanged();
@@ -186,17 +184,32 @@ void ProductWindow::onAddProduct() {
 }
 
 
-bool ProductWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) {
+bool ProductWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const {
     affectedOrderIds.clear();
     const auto& orders = orderSvc_.all();
     for (const auto& order : orders) {
-        if (order.status == "new" || order.status == "in_progress") {
-            if (order.items.find(productKey) != order.items.end()) {
-                affectedOrderIds.append(order.id);
-            }
+        if ((order.status == "new" || order.status == "in_progress") && order.items.contains(productKey)) {
+            affectedOrderIds.append(order.id);
         }
     }
     return !affectedOrderIds.isEmpty();
+}
+
+void ProductWindow::cancelOrderSafely(int orderId) {
+    Order* order = orderSvc_.findById(orderId);
+    if (!order) {
+        return;
+    }
+    try {
+        orderSvc_.setStatus(*order, "canceled");
+        if (order->status != "canceled") {
+            QMessageBox::warning(this, "error", QString("Failed to cancel order %1").arg(orderId));
+        }
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
+                            .arg(orderId)
+                            .arg(qs(e.what())));
+    }
 }
 
 void ProductWindow::onDeleteProduct(const std::string& productKey, const std::string& productName) {
@@ -214,7 +227,7 @@ void ProductWindow::onDeleteProduct(const std::string& productKey, const std::st
             msgBox.setInformativeText("What would you like to do?");
             
             QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
-            QPushButton* cancelOrdersBtn = msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+            msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
             
             msgBox.setDefaultButton(cancelBtn);
             msgBox.exec();
@@ -226,20 +239,7 @@ void ProductWindow::onDeleteProduct(const std::string& productKey, const std::st
             orderSvc_.setProductService(&productSvc_);
             
             for (int orderId : affectedOrderIds) {
-                Order* order = orderSvc_.findById(orderId);
-                if (order) {
-                    try {
-                        std::string oldStatus = order->status;
-                        orderSvc_.setStatus(*order, "canceled");
-                        if (order->status != "canceled") {
-                            QMessageBox::warning(this, "error", QString("Failed to cancel order %1").arg(orderId));
-                        }
-                    } catch (const CustomException& e) {
-                        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
-                                            .arg(orderId)
-                                            .arg(qs(e.what())));
-                    }
-                }
+                cancelOrderSafely(orderId);
             }
             orderSvc_.save();
             
@@ -277,15 +277,15 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
     auto* layout = new QVBoxLayout(editDialog);
     auto* form = new QFormLayout();
     
-    QLineEdit* nameEdit = new QLineEdit(editDialog);
+    auto* nameEdit = new QLineEdit(editDialog);
     nameEdit->setText(qs(product->name));
     form->addRow("Product name:", nameEdit);
     
-    QLineEdit* priceEdit = new QLineEdit(editDialog);
+    auto* priceEdit = new QLineEdit(editDialog);
     priceEdit->setText(QString::number(product->price, 'f', 2));
     form->addRow("Price:", priceEdit);
     
-    QLineEdit* stockEdit = new QLineEdit(editDialog);
+    auto* stockEdit = new QLineEdit(editDialog);
     stockEdit->setText(QString::number(product->stock));
     stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
     form->addRow("Stock:", stockEdit);
@@ -296,7 +296,7 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
     buttons->button(QDialogButtonBox::Ok)->setText("Save");
     layout->addWidget(buttons);
     
-    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, productKey, oldName = productName]() {
+        connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, oldName = productName]() {
         try {
             std::string newName = formatName(ss(nameEdit->text()));
             if (newName.empty()) {
@@ -328,11 +328,11 @@ void ProductWindow::onEditProduct(const std::string& productKey, const std::stri
             if (priceChanged || nameChanged) {
                 if (nameChanged) {
                     std::string oldKey = oldName;
-                    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+                    std::ranges::transform(oldKey, oldKey.begin(), ::tolower);
                     orderSvc_.recalculateOrdersWithProduct(oldKey);
                 }
                 std::string newKey = newName;
-                std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+                std::ranges::transform(newKey, newKey.begin(), ::tolower);
                 orderSvc_.recalculateOrdersWithProduct(newKey);
             }
             orderSvc_.save();

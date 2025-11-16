@@ -94,13 +94,13 @@ QString ReportService::generateReport(
 
         QString itemsStr;
         bool firstItem = true;
-        for (auto& kv : o.items) {
+        for (const auto& [key, value] : o.items) {
             if (!firstItem) itemsStr += "; ";
-            auto pit = orderService.price().find(kv.first);
+            auto pit = orderService.price().find(key);
             QString priceText = (pit != orderService.price().end())
                 ? QString::number(pit->second, 'f', 2)
                 : QString("n/a");
-            itemsStr += QString("%1 x%2 (@%3)").arg(qs(kv.first)).arg(kv.second).arg(priceText);
+            itemsStr += QString("%1 x%2 (@%3)").arg(qs(key)).arg(value).arg(priceText);
             firstItem = false;
         }
         if (itemsStr.isEmpty()) itemsStr = "-";
