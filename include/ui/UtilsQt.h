@@ -11,6 +11,8 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QMessageBox>
+#include <QDialogButtonBox>
+#include <QObject>
 #include <string>
 #include <algorithm>
 #include <cctype>
@@ -200,5 +202,74 @@ inline ProductEditValidationResult validateProductEditInputs(const QLineEdit* na
     }
     
     result.isValid = true;
+    return result;
+}
+
+struct ProductEditDialogData {
+    QDialog* dialog{nullptr};
+    ProductEditDialogFields fields;
+    QDialogButtonBox* buttons{nullptr};
+    QString oldName;
+};
+
+inline ProductEditDialogData createProductEditDialog(QWidget* parent, const Product* product) {
+    ProductEditDialogData data;
+    
+    if (!product) {
+        QMessageBox::warning(parent, "error", "product not found");
+        return data;
+    }
+    
+    data.dialog = new QDialog(parent);
+    data.dialog->setWindowTitle("Edit Product");
+    data.dialog->setModal(true);
+    
+    data.fields = createProductEditDialogFields(data.dialog, qs(product->name), product->price, product->stock);
+    data.oldName = qs(product->name);
+    
+    data.buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, data.dialog);
+    data.buttons->button(QDialogButtonBox::Ok)->setText("Save");
+    qobject_cast<QVBoxLayout*>(data.dialog->layout())->addWidget(data.buttons);
+    
+    data.dialog->resize(400, 150);
+    return data;
+}
+
+struct DeleteProductDialogResult {
+    bool shouldCancel{false};
+    bool shouldCancelOrders{false};
+};
+
+inline DeleteProductDialogResult showDeleteProductDialog(QWidget* parent, const QString& productName, int affectedOrderCount) {
+    DeleteProductDialogResult result;
+    
+    if (affectedOrderCount == 0) {
+        result.shouldCancelOrders = false;
+        result.shouldCancel = false;
+        return result;
+    }
+    
+    QMessageBox msgBox(parent);
+    msgBox.setWindowTitle("Delete Product");
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setText(QString("Product '%1' is used in %2 active order(s) (new or in_progress).")
+                  .arg(productName)
+                  .arg(affectedOrderCount));
+    msgBox.setInformativeText("What would you like to do?");
+    
+    QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+    msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+    
+    msgBox.setDefaultButton(cancelBtn);
+    msgBox.exec();
+    
+    if (msgBox.clickedButton() == cancelBtn) {
+        result.shouldCancel = true;
+        result.shouldCancelOrders = false;
+    } else {
+        result.shouldCancel = false;
+        result.shouldCancelOrders = true;
+    }
+    
     return result;
 }

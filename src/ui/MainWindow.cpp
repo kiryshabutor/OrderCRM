@@ -661,30 +661,18 @@ void MainWindow::onDeleteProduct(const std::string& productKey, const std::strin
         bool isUsed = isProductUsedInActiveOrders(productKey, affectedOrderIds);
         
         if (isUsed) {
-            QMessageBox msgBox(this);
-            msgBox.setWindowTitle("Delete Product");
-            msgBox.setIcon(QMessageBox::Warning);
-            msgBox.setText(QString("Product '%1' is used in %2 active order(s) (new or in_progress).")
-                          .arg(qs(productName))
-                          .arg(affectedOrderIds.size()));
-            msgBox.setInformativeText("What would you like to do?");
-            
-            QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
-            msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
-            
-            msgBox.setDefaultButton(cancelBtn);
-            msgBox.exec();
-            
-            if (msgBox.clickedButton() == cancelBtn) {
+            auto dialogResult = showDeleteProductDialog(this, qs(productName), affectedOrderIds.size());
+            if (dialogResult.shouldCancel) {
                 return;
             }
             
-            svc_.setProductService(&productSvc_);
-            
-            for (int orderId : affectedOrderIds) {
-                cancelOrderSafely(orderId);
+            if (dialogResult.shouldCancelOrders) {
+                svc_.setProductService(&productSvc_);
+                for (int orderId : affectedOrderIds) {
+                    cancelOrderSafely(orderId);
+                }
+                svc_.save();
             }
-            svc_.save();
         }
         
         productSvc_.removeProduct(productName);
@@ -707,30 +695,20 @@ void MainWindow::onDeleteProduct(const std::string& productKey, const std::strin
 
 void MainWindow::onEditProduct([[maybe_unused]] std::string_view productKey, std::string_view productName) {
     const Product* product = productSvc_.findProduct(std::string(productName));
-    if (!product) {
-        QMessageBox::warning(this, "error", "product not found");
+    auto dialogData = createProductEditDialog(this, product);
+    
+    if (!dialogData.dialog) {
         return;
     }
     
-    auto* editDialog = new QDialog(this);
-    editDialog->setWindowTitle("Edit Product");
-    editDialog->setModal(true);
-    
-    auto fields = createProductEditDialogFields(editDialog, qs(product->name), product->price, product->stock);
-    
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
-    buttons->button(QDialogButtonBox::Ok)->setText("Save");
-    qobject_cast<QVBoxLayout*>(editDialog->layout())->addWidget(buttons);
-    
-    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit = fields.nameEdit, priceEdit = fields.priceEdit, stockEdit = fields.stockEdit, oldName = std::string(productName)]() {
-        handleProductEditSave(nameEdit, priceEdit, stockEdit, oldName, editDialog);
+    connect(dialogData.buttons, &QDialogButtonBox::accepted, dialogData.dialog, [this, dialogData, oldName = ss(dialogData.oldName)]() {
+        handleProductEditSave(dialogData.fields.nameEdit, dialogData.fields.priceEdit, dialogData.fields.stockEdit, oldName, dialogData.dialog);
     });
     
-    connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
+    connect(dialogData.buttons, &QDialogButtonBox::rejected, dialogData.dialog, &QDialog::reject);
     
-    editDialog->resize(400, 150);
-    editDialog->exec();
-    delete editDialog;
+    dialogData.dialog->exec();
+    delete dialogData.dialog;
 }
 
 void MainWindow::handleProductEditSave(const QLineEdit* nameEdit, const QLineEdit* priceEdit, const QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog) {
