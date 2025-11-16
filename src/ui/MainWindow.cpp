@@ -795,7 +795,7 @@ void MainWindow::onEditProduct([[maybe_unused]] std::string_view productKey, std
     delete editDialog;
 }
 
-void MainWindow::handleProductEditSave(QLineEdit* nameEdit, QLineEdit* priceEdit, QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog) {
+void MainWindow::handleProductEditSave(const QLineEdit* nameEdit, const QLineEdit* priceEdit, const QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog) {
     try {
         std::string newName = formatName(ss(nameEdit->text()));
         if (newName.empty()) {

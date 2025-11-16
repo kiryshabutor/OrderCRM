@@ -23,7 +23,7 @@ private:
     void onDeleteProduct(const std::string& productKey, const std::string& productName);
     bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const;
     void cancelOrderSafely(int orderId);
-    void handleProductEditSave(QLineEdit* nameEdit, QLineEdit* priceEdit, QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog);
+    void handleProductEditSave(const QLineEdit* nameEdit, const QLineEdit* priceEdit, const QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog);
 
 private slots:
     void onAddProduct();
