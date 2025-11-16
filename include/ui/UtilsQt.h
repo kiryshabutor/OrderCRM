@@ -8,11 +8,17 @@
 #include <QLineEdit>
 #include <QIntValidator>
 #include <QVBoxLayout>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QMessageBox>
 #include <string>
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
 #include "include/Errors/CustomExceptions.h"
+#include "include/core/Product.h"
+#include "include/ui/NumericItem.h"
 
 inline QString qs(const std::string& s) { return QString::fromUtf8(s.c_str()); }
 inline std::string ss(const QString& s) { return s.toUtf8().constData(); }
@@ -128,4 +134,71 @@ inline ProductEditDialogFields createProductEditDialogFields(QDialog* dialog, co
     layout->addLayout(form);
     
     return fields;
+}
+
+struct ProductTableRowData {
+    QTableWidgetItem* nameCell{nullptr};
+    NumericItem* priceCell{nullptr};
+    QTableWidgetItem* stockCell{nullptr};
+    QPushButton* editBtn{nullptr};
+    QPushButton* deleteBtn{nullptr};
+};
+
+inline ProductTableRowData createProductTableRow(QTableWidget* table, int row, const Product& prod, QWidget* parent,
+                                                  bool centeredButtons = true) {
+    ProductTableRowData data;
+    
+    data.nameCell = new QTableWidgetItem(qs(prod.name));
+    data.nameCell->setTextAlignment(Qt::AlignCenter);
+    data.priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
+    data.priceCell->setTextAlignment(Qt::AlignCenter);
+    data.stockCell = new QTableWidgetItem(QString::number(prod.stock));
+    data.stockCell->setTextAlignment(Qt::AlignCenter);
+    
+    table->setItem(row, 0, data.nameCell);
+    table->setItem(row, 1, data.priceCell);
+    table->setItem(row, 2, data.stockCell);
+    
+    data.editBtn = createEditButton(parent, "Edit product");
+    data.deleteBtn = createDeleteButton(parent, "Delete product");
+    
+    table->setCellWidget(row, 3, createButtonContainer(parent, data.editBtn, centeredButtons));
+    table->setCellWidget(row, 4, createButtonContainer(parent, data.deleteBtn, centeredButtons));
+    
+    return data;
+}
+
+struct ProductEditValidationResult {
+    std::string newName;
+    double price{0.0};
+    int stock{0};
+    bool isValid{false};
+    QString errorMessage;
+};
+
+inline ProductEditValidationResult validateProductEditInputs(const QLineEdit* nameEdit, const QLineEdit* priceEdit, const QLineEdit* stockEdit) {
+    ProductEditValidationResult result;
+    
+    result.newName = formatName(ss(nameEdit->text()));
+    if (result.newName.empty()) {
+        result.errorMessage = "Product name cannot be empty";
+        return result;
+    }
+    
+    try {
+        result.price = parsePrice(priceEdit->text());
+    } catch (const ValidationException& e) {
+        result.errorMessage = qs(e.what());
+        return result;
+    }
+    
+    bool ok = false;
+    result.stock = stockEdit->text().toInt(&ok);
+    if (!ok || result.stock < 0) {
+        result.errorMessage = "Invalid stock value";
+        return result;
+    }
+    
+    result.isValid = true;
+    return result;
 }

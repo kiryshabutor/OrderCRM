@@ -65,31 +65,13 @@ void ProductWindow::refreshProducts() {
     productTable_->setRowCount((int)p.size());
     int i = 0;
     for (const auto& [productKey, prod] : p) {
-        
-        auto* nameCell = new QTableWidgetItem(qs(prod.name));
-        nameCell->setTextAlignment(Qt::AlignCenter);
-        auto* priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
-        priceCell->setTextAlignment(Qt::AlignCenter);
-        auto* stockCell = new QTableWidgetItem(QString::number(prod.stock));
-        stockCell->setTextAlignment(Qt::AlignCenter);
-        
-        productTable_->setItem(i, 0, nameCell);
-        productTable_->setItem(i, 1, priceCell);
-        productTable_->setItem(i, 2, stockCell);
-        
-        auto* editBtn = createEditButton(this, "Edit product");
-        connect(editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+        auto rowData = createProductTableRow(productTable_, i, prod, this);
+        connect(rowData.editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
             onEditProduct(productKey, productName);
         });
-        
-        auto* deleteBtn = createDeleteButton(this, "Delete product");
-        connect(deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+        connect(rowData.deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
             onDeleteProduct(productKey, productName);
         });
-        
-        productTable_->setCellWidget(i, 3, createButtonContainer(this, editBtn));
-        productTable_->setCellWidget(i, 4, createButtonContainer(this, deleteBtn));
-        
         ++i;
     }
     productTable_->setSortingEnabled(true);
@@ -233,9 +215,9 @@ void ProductWindow::onEditProduct([[maybe_unused]] std::string_view productKey, 
 
 void ProductWindow::handleProductEditSave(const QLineEdit* nameEdit, const QLineEdit* priceEdit, const QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog) {
     try {
-        std::string newName = formatName(ss(nameEdit->text()));
-        if (newName.empty()) {
-            QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
+        auto validation = validateProductEditInputs(nameEdit, priceEdit, stockEdit);
+        if (!validation.isValid) {
+            QMessageBox::warning(editDialog, "error", validation.errorMessage);
             return;
         }
         
@@ -245,20 +227,12 @@ void ProductWindow::handleProductEditSave(const QLineEdit* nameEdit, const QLine
             oldPrice = oldProduct->price;
         }
         
-        double price = parsePrice(priceEdit->text());
-        bool ok = false;
-        int stock = stockEdit->text().toInt(&ok);
-        if (!ok || stock < 0) {
-            QMessageBox::warning(editDialog, "error", "Invalid stock value");
-            return;
-        }
-        
-        productSvc_.updateProduct(oldName, newName, price, stock);
+        productSvc_.updateProduct(oldName, validation.newName, validation.price, validation.stock);
         productSvc_.save();
         
         orderSvc_.setPrices(productSvc_.all());
-        bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
-        bool nameChanged = (oldName != newName);
+        bool priceChanged = (oldProduct && std::abs(oldPrice - validation.price) > 0.01);
+        bool nameChanged = (oldName != validation.newName);
         
         if (priceChanged || nameChanged) {
             if (nameChanged) {
@@ -266,7 +240,7 @@ void ProductWindow::handleProductEditSave(const QLineEdit* nameEdit, const QLine
                 std::ranges::transform(oldKey, oldKey.begin(), ::tolower);
                 orderSvc_.recalculateOrdersWithProduct(oldKey);
             }
-            std::string newKey = newName;
+            std::string newKey = validation.newName;
             std::ranges::transform(newKey, newKey.begin(), ::tolower);
             orderSvc_.recalculateOrdersWithProduct(newKey);
         }
