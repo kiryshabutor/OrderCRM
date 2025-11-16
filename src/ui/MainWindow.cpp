@@ -98,57 +98,57 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
 
     auto* filterForm = new QFormLayout();
     
-    clientFilterEdit_ = new QLineEdit(this);
-    clientFilterEdit_->setPlaceholderText("Enter client name");
-    filterForm->addRow("Client:", clientFilterEdit_);
+    filterWidgets_.clientEdit_ = new QLineEdit(this);
+    filterWidgets_.clientEdit_->setPlaceholderText("Enter client name");
+    filterForm->addRow("Client:", filterWidgets_.clientEdit_);
 
-    statusFilterCombo_ = new QComboBox(this);
-    statusFilterCombo_->addItems({"Any", "new", "in_progress", "done", "canceled"});
-    filterForm->addRow("Status:", statusFilterCombo_);
+    filterWidgets_.statusCombo_ = new QComboBox(this);
+    filterWidgets_.statusCombo_->addItems({"Any", "new", "in_progress", "done", "canceled"});
+    filterForm->addRow("Status:", filterWidgets_.statusCombo_);
 
     QRegularExpression intRe("^[0-9]*$");
     QRegularExpression dblRe("^[0-9]+([\\.,][0-9]+)?$");
 
-    minTotalEdit_ = new QLineEdit(this);
-    minTotalEdit_->setPlaceholderText("min total");
-    minTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
-    filterForm->addRow("Min total:", minTotalEdit_);
+    filterWidgets_.minTotalEdit_ = new QLineEdit(this);
+    filterWidgets_.minTotalEdit_->setPlaceholderText("min total");
+    filterWidgets_.minTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+    filterForm->addRow("Min total:", filterWidgets_.minTotalEdit_);
 
-    maxTotalEdit_ = new QLineEdit(this);
-    maxTotalEdit_->setPlaceholderText("max total");
-    maxTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
-    filterForm->addRow("Max total:", maxTotalEdit_);
+    filterWidgets_.maxTotalEdit_ = new QLineEdit(this);
+    filterWidgets_.maxTotalEdit_->setPlaceholderText("max total");
+    filterWidgets_.maxTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+    filterForm->addRow("Max total:", filterWidgets_.maxTotalEdit_);
 
-    minIdEdit_ = new QLineEdit(this);
-    minIdEdit_->setPlaceholderText("min id");
-    minIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
-    filterForm->addRow("Min ID:", minIdEdit_);
+    filterWidgets_.minIdEdit_ = new QLineEdit(this);
+    filterWidgets_.minIdEdit_->setPlaceholderText("min id");
+    filterWidgets_.minIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+    filterForm->addRow("Min ID:", filterWidgets_.minIdEdit_);
 
-    maxIdEdit_ = new QLineEdit(this);
-    maxIdEdit_->setPlaceholderText("max id");
-    maxIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
-    filterForm->addRow("Max ID:", maxIdEdit_);
+    filterWidgets_.maxIdEdit_ = new QLineEdit(this);
+    filterWidgets_.maxIdEdit_->setPlaceholderText("max id");
+    filterWidgets_.maxIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+    filterForm->addRow("Max ID:", filterWidgets_.maxIdEdit_);
 
-    useFromCheck_ = new QCheckBox("From date:", this);
-    fromDateEdit_ = new QDateTimeEdit(this);
-    fromDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
-    fromDateEdit_->setCalendarPopup(true);
-    fromDateEdit_->setDateTime(QDateTime::currentDateTime());
-    fromDateEdit_->setEnabled(false);
+    filterWidgets_.useFromCheck_ = new QCheckBox("From date:", this);
+    filterWidgets_.fromDateEdit_ = new QDateTimeEdit(this);
+    filterWidgets_.fromDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    filterWidgets_.fromDateEdit_->setCalendarPopup(true);
+    filterWidgets_.fromDateEdit_->setDateTime(QDateTime::currentDateTime());
+    filterWidgets_.fromDateEdit_->setEnabled(false);
     auto* fromLayout = new QHBoxLayout();
-    fromLayout->addWidget(useFromCheck_);
-    fromLayout->addWidget(fromDateEdit_);
+    fromLayout->addWidget(filterWidgets_.useFromCheck_);
+    fromLayout->addWidget(filterWidgets_.fromDateEdit_);
     filterForm->addRow(fromLayout);
 
-    useToCheck_ = new QCheckBox("To date:", this);
-    toDateEdit_ = new QDateTimeEdit(this);
-    toDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
-    toDateEdit_->setCalendarPopup(true);
-    toDateEdit_->setDateTime(QDateTime::currentDateTime());
-    toDateEdit_->setEnabled(false);
+    filterWidgets_.useToCheck_ = new QCheckBox("To date:", this);
+    filterWidgets_.toDateEdit_ = new QDateTimeEdit(this);
+    filterWidgets_.toDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    filterWidgets_.toDateEdit_->setCalendarPopup(true);
+    filterWidgets_.toDateEdit_->setDateTime(QDateTime::currentDateTime());
+    filterWidgets_.toDateEdit_->setEnabled(false);
     auto* toLayout = new QHBoxLayout();
-    toLayout->addWidget(useToCheck_);
-    toLayout->addWidget(toDateEdit_);
+    toLayout->addWidget(filterWidgets_.useToCheck_);
+    toLayout->addWidget(filterWidgets_.toDateEdit_);
     filterForm->addRow(toLayout);
 
     right->addLayout(filterForm);
@@ -173,18 +173,18 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     right->addWidget(statsLabel);
     
     auto* statsLayout = new QVBoxLayout();
-    statsNewLabel_ = new QLabel("New: 0", this);
-    statsInProgressLabel_ = new QLabel("In Progress: 0", this);
-    statsDoneLabel_ = new QLabel("Done: 0", this);
-    statsCanceledLabel_ = new QLabel("Canceled: 0", this);
-    statsTotalRevenueLabel_ = new QLabel("Total Revenue: $0.00", this);
-    statsTotalRevenueLabel_->setStyleSheet("font-weight: bold; margin-top: 5px;");
+    orderStats_.newLabel_ = new QLabel("New: 0", this);
+    orderStats_.inProgressLabel_ = new QLabel("In Progress: 0", this);
+    orderStats_.doneLabel_ = new QLabel("Done: 0", this);
+    orderStats_.canceledLabel_ = new QLabel("Canceled: 0", this);
+    orderStats_.totalRevenueLabel_ = new QLabel("Total Revenue: $0.00", this);
+    orderStats_.totalRevenueLabel_->setStyleSheet("font-weight: bold; margin-top: 5px;");
     
-    statsLayout->addWidget(statsNewLabel_);
-    statsLayout->addWidget(statsInProgressLabel_);
-    statsLayout->addWidget(statsDoneLabel_);
-    statsLayout->addWidget(statsCanceledLabel_);
-    statsLayout->addWidget(statsTotalRevenueLabel_);
+    statsLayout->addWidget(orderStats_.newLabel_);
+    statsLayout->addWidget(orderStats_.inProgressLabel_);
+    statsLayout->addWidget(orderStats_.doneLabel_);
+    statsLayout->addWidget(orderStats_.canceledLabel_);
+    statsLayout->addWidget(orderStats_.totalRevenueLabel_);
     
     openChartsBtn_ = new QPushButton("Open Charts", this);
     statsLayout->addWidget(openChartsBtn_);
@@ -227,20 +227,20 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     productStatsLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
     productsRight->addWidget(productStatsLabel);
     
-    productStatsLowStockLabel_ = new QLabel("Low Stock (Top 3):", this);
-    productStatsHighStockLabel_ = new QLabel("High Stock (Top 3):", this);
-    productStatsExpensiveLabel_ = new QLabel("Most Expensive (Top 3):", this);
-    productStatsCheapLabel_ = new QLabel("Cheapest (Top 3):", this);
-    productStatsTotalCountLabel_ = new QLabel("Total Products: 0", this);
-    productStatsTotalValueLabel_ = new QLabel("Total Value: $0.00", this);
+    productStats_.lowStockLabel_ = new QLabel("Low Stock (Top 3):", this);
+    productStats_.highStockLabel_ = new QLabel("High Stock (Top 3):", this);
+    productStats_.expensiveLabel_ = new QLabel("Most Expensive (Top 3):", this);
+    productStats_.cheapLabel_ = new QLabel("Cheapest (Top 3):", this);
+    productStats_.totalCountLabel_ = new QLabel("Total Products: 0", this);
+    productStats_.totalValueLabel_ = new QLabel("Total Value: $0.00", this);
     
-    productsRight->addWidget(productStatsLowStockLabel_);
-    productsRight->addWidget(productStatsHighStockLabel_);
-    productsRight->addWidget(productStatsExpensiveLabel_);
-    productsRight->addWidget(productStatsCheapLabel_);
+    productsRight->addWidget(productStats_.lowStockLabel_);
+    productsRight->addWidget(productStats_.highStockLabel_);
+    productsRight->addWidget(productStats_.expensiveLabel_);
+    productsRight->addWidget(productStats_.cheapLabel_);
     productsRight->addSpacing(20);
-    productsRight->addWidget(productStatsTotalCountLabel_);
-    productsRight->addWidget(productStatsTotalValueLabel_);
+    productsRight->addWidget(productStats_.totalCountLabel_);
+    productsRight->addWidget(productStats_.totalValueLabel_);
     productsRight->addStretch();
     
     productsLayout->addLayout(productsLeft, 3);
@@ -255,22 +255,22 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     connect(clearFilterBtn_, &QPushButton::clicked, this, &MainWindow::onClearFilter);
     connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
 
-    connect(clientFilterEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
-    connect(statusFilterCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
-    connect(minTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
-    connect(maxTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
-    connect(minIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
-    connect(maxIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
-    connect(useFromCheck_, &QCheckBox::toggled, this, [this](bool checked) {
-        fromDateEdit_->setEnabled(checked);
+    connect(filterWidgets_.clientEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.statusCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.minTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.maxTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.minIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.maxIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.useFromCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        filterWidgets_.fromDateEdit_->setEnabled(checked);
         onFilterChanged();
     });
-    connect(useToCheck_, &QCheckBox::toggled, this, [this](bool checked) {
-        toDateEdit_->setEnabled(checked);
+    connect(filterWidgets_.useToCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        filterWidgets_.toDateEdit_->setEnabled(checked);
         onFilterChanged();
     });
-    connect(fromDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
-    connect(toDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.fromDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
+    connect(filterWidgets_.toDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
 
     setupCompleters();
     showMaximized();
@@ -281,166 +281,215 @@ MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* p
     QTimer::singleShot(0, this, [this] { resizeEvent(nullptr); });
 }
 
+bool MainWindow::matchesClientFilter(const Order& o) const {
+    if (filterState_.activeClientFilter_.isEmpty()) return true;
+    QString c = qs(o.client);
+    return c.toLower().contains(filterState_.activeClientFilter_.toLower());
+}
+
+bool MainWindow::matchesStatusFilter(const Order& o) const {
+    if (filterState_.activeStatusFilter_.isEmpty()) return true;
+    return qs(o.status).compare(filterState_.activeStatusFilter_, Qt::CaseInsensitive) == 0;
+}
+
+bool MainWindow::matchesTotalFilter(const Order& o) const {
+    if (!filterState_.minTotalText_.isEmpty()) {
+        QString t = filterState_.minTotalText_;
+        t.replace(',', '.');
+        bool b = false;
+        const double v = t.toDouble(&b);
+        if (b && o.total < v) return false;
+    }
+    if (!filterState_.maxTotalText_.isEmpty()) {
+        QString t = filterState_.maxTotalText_;
+        t.replace(',', '.');
+        bool b = false;
+        const double v = t.toDouble(&b);
+        if (b && o.total > v) return false;
+    }
+    return true;
+}
+
+bool MainWindow::matchesIdFilter(const Order& o) const {
+    if (!filterState_.minIdText_.isEmpty()) {
+        bool b = false;
+        const int v = filterState_.minIdText_.toInt(&b);
+        if (b && o.id < v) return false;
+    }
+    if (!filterState_.maxIdText_.isEmpty()) {
+        bool b = false;
+        const int v = filterState_.maxIdText_.toInt(&b);
+        if (b && o.id > v) return false;
+    }
+    return true;
+}
+
+bool MainWindow::matchesDateFilter(const Order& o) const {
+    if (!filterState_.useFrom_ && !filterState_.useTo_) return true;
+    QDateTime created = QDateTime::fromString(qs(o.createdAt), Qt::ISODate);
+    if (filterState_.useFrom_ && created < filterState_.fromDate_) return false;
+    if (filterState_.useTo_ && created > filterState_.toDate_) return false;
+    return true;
+}
+
 QList<const Order*> MainWindow::currentFilteredRows() const {
     const auto& all = svc_.all();
     QList<const Order*> rows;
     for (const auto& o : all) {
-        bool ok = true;
-        if (!activeClientFilter_.isEmpty()) {
-            QString c = qs(o.client);
-            ok = ok && c.toLower().contains(activeClientFilter_.toLower());
+        if (matchesClientFilter(o) && matchesStatusFilter(o) && matchesTotalFilter(o) && 
+            matchesIdFilter(o) && matchesDateFilter(o)) {
+            rows.push_back(&o);
         }
-        if (!activeStatusFilter_.isEmpty()) {
-            ok = ok && (qs(o.status).compare(activeStatusFilter_, Qt::CaseInsensitive) == 0);
-        }
-        if (!minTotalText_.isEmpty()) {
-            QString t = minTotalText_; t.replace(',', '.');
-            bool b = false; double v = t.toDouble(&b);
-            if (b) ok = ok && (o.total >= v);
-        }
-        if (!maxTotalText_.isEmpty()) {
-            QString t = maxTotalText_; t.replace(',', '.');
-            bool b = false; double v = t.toDouble(&b);
-            if (b) ok = ok && (o.total <= v);
-        }
-        if (!minIdText_.isEmpty()) {
-            bool b = false; int v = minIdText_.toInt(&b);
-            if (b) ok = ok && (o.id >= v);
-        }
-        if (!maxIdText_.isEmpty()) {
-            bool b = false; int v = maxIdText_.toInt(&b);
-            if (b) ok = ok && (o.id <= v);
-        }
-        if (useFrom_ || useTo_) {
-            QDateTime created = QDateTime::fromString(qs(o.createdAt), Qt::ISODate);
-            if (useFrom_) ok = ok && (created >= fromDate_);
-            if (useTo_) ok = ok && (created <= toDate_);
-        }
-        if (ok) rows.push_back(&o);
     }
     return rows;
 }
 
+
+void MainWindow::setupEmptyTableRow() {
+    table_->setRowCount(1);
+    table_->setSpan(0, 0, 1, table_->columnCount());
+    auto* item = new QTableWidgetItem("Not found");
+    item->setTextAlignment(Qt::AlignCenter);
+    QFont f = item->font();
+    f.setItalic(true);
+    item->setFont(f);
+    table_->setItem(0, 0, item);
+}
+
+QString MainWindow::formatOrderItems(const Order& o) const {
+    QString itemsStr;
+    bool first = true;
+    for (const auto& [itemKey, qty] : o.items) {
+        const auto pit = svc_.price().find(itemKey);
+        const QString priceText = (pit != svc_.price().end())
+            ? QString::number(pit->second, 'f', 2)
+            : QString("n/a");
+        if (!first) itemsStr += "\n";
+        itemsStr += QString("%1 ×%2 (%3)")
+            .arg(qs(itemKey))
+            .arg(qty)
+            .arg(priceText);
+        first = false;
+    }
+    return itemsStr;
+}
+
+QTableWidgetItem* MainWindow::createStatusCell(const Order& o) const {
+    auto* statusCell = new QTableWidgetItem(qs(o.status));
+    statusCell->setTextAlignment(Qt::AlignCenter);
+    if (o.status == "new") {
+        statusCell->setBackground(QColor("#388E3C"));
+        statusCell->setForeground(QBrush(Qt::white));
+    } else if (o.status == "in_progress") {
+        statusCell->setBackground(QColor("#FBC02D"));
+        statusCell->setForeground(QBrush(Qt::black));
+    } else if (o.status == "done") {
+        statusCell->setBackground(QColor("#1976D2"));
+        statusCell->setForeground(QBrush(Qt::white));
+    } else if (o.status == "canceled") {
+        statusCell->setBackground(QColor("#D32F2F"));
+        statusCell->setForeground(QBrush(Qt::white));
+    }
+    return statusCell;
+}
+
+void MainWindow::populateTableRow(int row, const Order& o) {
+    auto* idCell = new NumericItem(o.id, QString::number(o.id));
+    idCell->setTextAlignment(Qt::AlignCenter);
+    
+    auto* clientCell = new QTableWidgetItem(qs(o.client));
+    clientCell->setTextAlignment(Qt::AlignCenter);
+    
+    const QString itemsStr = formatOrderItems(o);
+    auto* itemCell = new QTableWidgetItem(itemsStr);
+    itemCell->setTextAlignment(Qt::AlignCenter);
+    
+    auto* statusCell = createStatusCell(o);
+    
+    auto* totalCell = new NumericItem(o.total, QString::number(o.total, 'f', 2));
+    totalCell->setTextAlignment(Qt::AlignCenter);
+    
+    QString createdAtStr = qs(o.createdAt);
+    createdAtStr.replace("T", " ");
+    auto* createdCell = new QTableWidgetItem(createdAtStr);
+    createdCell->setTextAlignment(Qt::AlignCenter);
+    
+    auto* editBtn = new QPushButton("⚙️", this);
+    editBtn->setStyleSheet(
+        "QPushButton {"
+        "background-color: #2196F3;"
+        "color: white;"
+        "border: none;"
+        "padding: 4px 8px;"
+        "border-radius: 4px;"
+        "font-size: 14px;"
+        "}"
+        "QPushButton:hover {"
+        "background-color: #1976D2;"
+        "}"
+        "QPushButton:pressed {"
+        "background-color: #0D47A1;"
+        "}"
+    );
+    editBtn->setToolTip("Edit order");
+    editBtn->setFixedSize(35, 25);
+    connect(editBtn, &QPushButton::clicked, this, [this, orderId = o.id]() {
+        if (const Order* order = svc_.findById(orderId); !order) {
+            QMessageBox::warning(this, "error", "order not found");
+            return;
+        }
+        EditOrderDialog editDlg(svc_, orderId, this);
+        editDlg.setProductService(&productSvc_);
+        connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
+        editDlg.exec();
+        refreshTable();
+        updateStatistics();
+    });
+    
+    auto* widgetContainer = new QWidget(this);
+    auto* layout = new QHBoxLayout(widgetContainer);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->addStretch();
+    layout->addWidget(editBtn);
+    layout->addStretch();
+    layout->setAlignment(Qt::AlignCenter);
+    
+    table_->setItem(row, 0, idCell);
+    table_->setItem(row, 1, clientCell);
+    table_->setItem(row, 2, itemCell);
+    table_->setItem(row, 3, statusCell);
+    table_->setItem(row, 4, totalCell);
+    table_->setItem(row, 5, createdCell);
+    table_->setCellWidget(row, 6, widgetContainer);
+}
 
 void MainWindow::refreshTable() {
     table_->setSortingEnabled(false);
     table_->clearSpans();
     table_->clearContents();
 
-    QList<const Order*> rows = currentFilteredRows();
+    const QList<const Order*> rows = currentFilteredRows();
 
     if (rows.isEmpty()) {
-        table_->setRowCount(1);
-        table_->setSpan(0, 0, 1, table_->columnCount());
-        auto* item = new QTableWidgetItem("Not found");
-        item->setTextAlignment(Qt::AlignCenter);
-        QFont f = item->font();
-        f.setItalic(true);
-        item->setFont(f);
-        table_->setItem(0, 0, item);
+        setupEmptyTableRow();
     } else {
         table_->setRowCount(rows.size());
         int r = 0;
-        for (auto* op : rows) {
-            const auto& o = *op;
-            QString itemsStr;
-            bool first = true;
-            for (const auto& [itemKey, qty] : o.items) {
-                auto pit = svc_.price().find(itemKey);
-                QString priceText = (pit != svc_.price().end())
-                    ? QString::number(pit->second, 'f', 2)
-                    : QString("n/a");
-                if (!first) itemsStr += "\n";
-                itemsStr += QString("%1 ×%2 (%3)")
-                    .arg(qs(itemKey))
-                    .arg(qty)
-                    .arg(priceText);
-                first = false;
-            }
-            auto* idCell = new NumericItem(o.id, QString::number(o.id));
-            idCell->setTextAlignment(Qt::AlignCenter);
-            
-            auto* clientCell = new QTableWidgetItem(qs(o.client));
-            clientCell->setTextAlignment(Qt::AlignCenter);
-            
-            auto* itemCell = new QTableWidgetItem(itemsStr);
-            itemCell->setTextAlignment(Qt::AlignCenter);
-            
-            auto* statusCell = new QTableWidgetItem(qs(o.status));
-            statusCell->setTextAlignment(Qt::AlignCenter);
-            if (o.status == "new") { statusCell->setBackground(QColor("#388E3C")); statusCell->setForeground(QBrush(Qt::white)); }
-            else if (o.status == "in_progress") { statusCell->setBackground(QColor("#FBC02D")); statusCell->setForeground(QBrush(Qt::black)); }
-            else if (o.status == "done") { statusCell->setBackground(QColor("#1976D2")); statusCell->setForeground(QBrush(Qt::white)); }
-            else if (o.status == "canceled") { statusCell->setBackground(QColor("#D32F2F")); statusCell->setForeground(QBrush(Qt::white)); }
-            
-            auto* totalCell = new NumericItem(o.total, QString::number(o.total, 'f', 2));
-            totalCell->setTextAlignment(Qt::AlignCenter);
-            
-            QString createdAtStr = qs(o.createdAt);
-            createdAtStr.replace("T", " ");
-            auto* createdCell = new QTableWidgetItem(createdAtStr);
-            createdCell->setTextAlignment(Qt::AlignCenter);
-            
-            auto* editBtn = new QPushButton("⚙️", this);
-            editBtn->setStyleSheet(
-                "QPushButton {"
-                "background-color: #2196F3;"
-                "color: white;"
-                "border: none;"
-                "padding: 4px 8px;"
-                "border-radius: 4px;"
-                "font-size: 14px;"
-                "}"
-                "QPushButton:hover {"
-                "background-color: #1976D2;"
-                "}"
-                "QPushButton:pressed {"
-                "background-color: #0D47A1;"
-                "}"
-            );
-            editBtn->setToolTip("Edit order");
-            editBtn->setFixedSize(35, 25);
-            connect(editBtn, &QPushButton::clicked, this, [this, orderId = o.id]() {
-                if (const Order* order = svc_.findById(orderId); !order) {
-                    QMessageBox::warning(this, "error", "order not found");
-                    return;
-                }
-                EditOrderDialog editDlg(svc_, orderId, this);
-                editDlg.setProductService(&productSvc_);
-                connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
-                editDlg.exec();
-                refreshTable();
-                updateStatistics();
-            });
-            
-            auto* widgetContainer = new QWidget(this);
-            auto* layout = new QHBoxLayout(widgetContainer);
-            layout->setContentsMargins(0, 0, 0, 0);
-            layout->addStretch();
-            layout->addWidget(editBtn);
-            layout->addStretch();
-            layout->setAlignment(Qt::AlignCenter);
-            
-            table_->setItem(r, 0, idCell);
-            table_->setItem(r, 1, clientCell);
-            table_->setItem(r, 2, itemCell);
-            table_->setItem(r, 3, statusCell);
-            table_->setItem(r, 4, totalCell);
-            table_->setItem(r, 5, createdCell);
-            table_->setCellWidget(r, 6, widgetContainer);
+        for (const auto* op : rows) {
+            populateTableRow(r, *op);
             ++r;
         }
         table_->resizeRowsToContents();
         for (int row = 0; row < table_->rowCount(); ++row) {
-            int h = table_->rowHeight(row);
+            const int h = table_->rowHeight(row);
             table_->setRowHeight(row, h + 8);
         }
     }
 
-    bool filterActive = !activeClientFilter_.isEmpty() || !activeStatusFilter_.isEmpty()
-                        || !minTotalText_.isEmpty() || !maxTotalText_.isEmpty()
-                        || !minIdText_.isEmpty() || !maxIdText_.isEmpty()
-                        || useFrom_ || useTo_;
+    bool filterActive = !filterState_.activeClientFilter_.isEmpty() || !filterState_.activeStatusFilter_.isEmpty()
+                        || !filterState_.minTotalText_.isEmpty() || !filterState_.maxTotalText_.isEmpty()
+                        || !filterState_.minIdText_.isEmpty() || !filterState_.maxIdText_.isEmpty()
+                        || filterState_.useFrom_ || filterState_.useTo_;
 
     int foundCount = rows.size();
     if (filterActive) {
@@ -516,10 +565,10 @@ void MainWindow::onAddOrder() {
 
 
 void MainWindow::onOpenReportDialog() {
-    bool filterActive = !activeClientFilter_.isEmpty() || !activeStatusFilter_.isEmpty()
-                        || !minTotalText_.isEmpty() || !maxTotalText_.isEmpty()
-                        || !minIdText_.isEmpty() || !maxIdText_.isEmpty()
-                        || useFrom_ || useTo_;
+    bool filterActive = !filterState_.activeClientFilter_.isEmpty() || !filterState_.activeStatusFilter_.isEmpty()
+                        || !filterState_.minTotalText_.isEmpty() || !filterState_.maxTotalText_.isEmpty()
+                        || !filterState_.minIdText_.isEmpty() || !filterState_.maxIdText_.isEmpty()
+                        || filterState_.useFrom_ || filterState_.useTo_;
     ReportDialog dlg(filterActive, this);
     if (dlg.exec() != QDialog::Accepted) return;
 
@@ -533,16 +582,16 @@ void MainWindow::onOpenReportDialog() {
     }
 
     ReportFilterInfo filterInfo;
-    filterInfo.clientFilter = activeClientFilter_;
-    filterInfo.statusFilter = activeStatusFilter_;
-    filterInfo.minTotal = minTotalText_;
-    filterInfo.maxTotal = maxTotalText_;
-    filterInfo.minId = minIdText_;
-    filterInfo.maxId = maxIdText_;
-    filterInfo.fromDate = fromDate_;
-    filterInfo.toDate = toDate_;
-    filterInfo.useFrom = useFrom_;
-    filterInfo.useTo = useTo_;
+    filterInfo.clientFilter = filterState_.activeClientFilter_;
+    filterInfo.statusFilter = filterState_.activeStatusFilter_;
+    filterInfo.minTotal = filterState_.minTotalText_;
+    filterInfo.maxTotal = filterState_.maxTotalText_;
+    filterInfo.minId = filterState_.minIdText_;
+    filterInfo.maxId = filterState_.maxIdText_;
+    filterInfo.fromDate = filterState_.fromDate_;
+    filterInfo.toDate = filterState_.toDate_;
+    filterInfo.useFrom = filterState_.useFrom_;
+    filterInfo.useTo = filterState_.useTo_;
 
     QString fileName = ReportService::generateReport(
         rows,
@@ -860,7 +909,7 @@ void MainWindow::updateProductStatistics() {
     for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
         lowStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
     }
-    productStatsLowStockLabel_->setText(lowStock);
+    productStats_.lowStockLabel_->setText(lowStock);
     
     std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.stock > b.second.stock; });
@@ -869,7 +918,7 @@ void MainWindow::updateProductStatistics() {
     for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
         highStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
     }
-    productStatsHighStockLabel_->setText(highStock);
+    productStats_.highStockLabel_->setText(highStock);
     
     std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.price > b.second.price; });
@@ -879,7 +928,7 @@ void MainWindow::updateProductStatistics() {
         expensive += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
                     .arg(QString::number(productsVec[i].second.price, 'f', 2));
     }
-    productStatsExpensiveLabel_->setText(expensive);
+    productStats_.expensiveLabel_->setText(expensive);
     
     std::ranges::sort(productsVec, 
         [](const auto& a, const auto& b) { return a.second.price < b.second.price; });
@@ -889,7 +938,7 @@ void MainWindow::updateProductStatistics() {
         cheap += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
                 .arg(QString::number(productsVec[i].second.price, 'f', 2));
     }
-    productStatsCheapLabel_->setText(cheap);
+    productStats_.cheapLabel_->setText(cheap);
     
     int totalCount = products.size();
     double totalValue = 0.0;
@@ -898,8 +947,8 @@ void MainWindow::updateProductStatistics() {
         totalValue += product.price * product.stock;
     }
     
-    productStatsTotalCountLabel_->setText(QString("Total Products: %1").arg(totalCount));
-    productStatsTotalValueLabel_->setText(QString("Total Value: $%1").arg(QString::number(totalValue, 'f', 2)));
+    productStats_.totalCountLabel_->setText(QString("Total Products: %1").arg(totalCount));
+    productStats_.totalValueLabel_->setText(QString("Total Value: $%1").arg(QString::number(totalValue, 'f', 2)));
 }
 
 void MainWindow::onOpenStatistics() {
@@ -927,24 +976,24 @@ void MainWindow::updateStatistics() {
         totalRevenue += o.total;
     }
     
-    statsNewLabel_->setText(QString("New: %1").arg(newCount));
-    statsInProgressLabel_->setText(QString("In Progress: %1").arg(inProgressCount));
-    statsDoneLabel_->setText(QString("Done: %1").arg(doneCount));
-    statsCanceledLabel_->setText(QString("Canceled: %1").arg(canceledCount));
-    statsTotalRevenueLabel_->setText(QString("Total Revenue: $%1").arg(QString::number(totalRevenue, 'f', 2)));
+    orderStats_.newLabel_->setText(QString("New: %1").arg(newCount));
+    orderStats_.inProgressLabel_->setText(QString("In Progress: %1").arg(inProgressCount));
+    orderStats_.doneLabel_->setText(QString("Done: %1").arg(doneCount));
+    orderStats_.canceledLabel_->setText(QString("Canceled: %1").arg(canceledCount));
+    orderStats_.totalRevenueLabel_->setText(QString("Total Revenue: $%1").arg(QString::number(totalRevenue, 'f', 2)));
 }
 
 void MainWindow::applyFilters() {
-    activeClientFilter_ = clientFilterEdit_->text().trimmed();
-    activeStatusFilter_ = statusFilterCombo_->currentIndex() == 0 ? QString() : statusFilterCombo_->currentText();
-    minTotalText_ = minTotalEdit_->text().trimmed();
-    maxTotalText_ = maxTotalEdit_->text().trimmed();
-    minIdText_ = minIdEdit_->text().trimmed();
-    maxIdText_ = maxIdEdit_->text().trimmed();
-    useFrom_ = useFromCheck_->isChecked();
-    useTo_ = useToCheck_->isChecked();
-    fromDate_ = fromDateEdit_->dateTime();
-    toDate_ = toDateEdit_->dateTime();
+    filterState_.activeClientFilter_ = filterWidgets_.clientEdit_->text().trimmed();
+    filterState_.activeStatusFilter_ = filterWidgets_.statusCombo_->currentIndex() == 0 ? QString() : filterWidgets_.statusCombo_->currentText();
+    filterState_.minTotalText_ = filterWidgets_.minTotalEdit_->text().trimmed();
+    filterState_.maxTotalText_ = filterWidgets_.maxTotalEdit_->text().trimmed();
+    filterState_.minIdText_ = filterWidgets_.minIdEdit_->text().trimmed();
+    filterState_.maxIdText_ = filterWidgets_.maxIdEdit_->text().trimmed();
+    filterState_.useFrom_ = filterWidgets_.useFromCheck_->isChecked();
+    filterState_.useTo_ = filterWidgets_.useToCheck_->isChecked();
+    filterState_.fromDate_ = filterWidgets_.fromDateEdit_->dateTime();
+    filterState_.toDate_ = filterWidgets_.toDateEdit_->dateTime();
     refreshTable();
 }
 
@@ -953,16 +1002,16 @@ void MainWindow::onFilterChanged() {
 }
 
 void MainWindow::onClearFilter() {
-    clientFilterEdit_->clear();
-    statusFilterCombo_->setCurrentIndex(0);
-    minTotalEdit_->clear();
-    maxTotalEdit_->clear();
-    minIdEdit_->clear();
-    maxIdEdit_->clear();
-    useFromCheck_->setChecked(false);
-    useToCheck_->setChecked(false);
-    fromDateEdit_->setDateTime(QDateTime::currentDateTime());
-    toDateEdit_->setDateTime(QDateTime::currentDateTime());
+    filterWidgets_.clientEdit_->clear();
+    filterWidgets_.statusCombo_->setCurrentIndex(0);
+    filterWidgets_.minTotalEdit_->clear();
+    filterWidgets_.maxTotalEdit_->clear();
+    filterWidgets_.minIdEdit_->clear();
+    filterWidgets_.maxIdEdit_->clear();
+    filterWidgets_.useFromCheck_->setChecked(false);
+    filterWidgets_.useToCheck_->setChecked(false);
+    filterWidgets_.fromDateEdit_->setDateTime(QDateTime::currentDateTime());
+    filterWidgets_.toDateEdit_->setDateTime(QDateTime::currentDateTime());
     applyFilters();
 }
 
@@ -982,7 +1031,7 @@ void MainWindow::setupCompleters() {
         clientFilterCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
         clientFilterCompleter_->setCompletionMode(QCompleter::PopupCompletion);
         clientFilterCompleter_->setFilterMode(Qt::MatchContains);
-        clientFilterEdit_->setCompleter(clientFilterCompleter_);
+        filterWidgets_.clientEdit_->setCompleter(clientFilterCompleter_);
     } else {
         clientFilterModel_->setStringList(clientNames);
     }

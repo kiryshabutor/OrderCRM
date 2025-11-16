@@ -10,6 +10,19 @@ class QDateTimeEdit;
 class QCheckBox;
 class QLabel;
 
+struct FilterParams {
+    QString currentClient;
+    QString currentStatus;
+    QString minTotal;
+    QString maxTotal;
+    QString minId;
+    QString maxId;
+    QDateTime fromDt;
+    bool useFrom{false};
+    QDateTime toDt;
+    bool useTo{false};
+};
+
 class FilterDialog : public QDialog {
     Q_OBJECT
 private:
@@ -25,17 +38,7 @@ private:
     QCheckBox* useToCheck_;
     QDialogButtonBox* buttons_;
 public:
-    explicit FilterDialog(const QString& currentClient,
-                          const QString& currentStatus,
-                          const QString& minTotal,
-                          const QString& maxTotal,
-                          const QString& minId,
-                          const QString& maxId,
-                          const QDateTime& fromDt,
-                          bool useFrom,
-                          const QDateTime& toDt,
-                          bool useTo,
-                          QWidget* parent = nullptr);
+    explicit FilterDialog(const FilterParams& params, QWidget* parent = nullptr);
     QString clientFilter() const;
     QString statusFilter() const;
     QString minTotalText() const;

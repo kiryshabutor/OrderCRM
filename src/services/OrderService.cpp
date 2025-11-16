@@ -7,6 +7,8 @@
 #include <sstream>
 #include <ctime>
 #include <cmath>
+#include <format>
+#include <ranges>
 
 static std::string now_iso8601_srv() {
     auto tp = std::chrono::system_clock::now();
@@ -61,16 +63,15 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
         }
         
         if (int availableStock = productService_->getStock(key); availableStock < qty) {
-            throw ValidationException("not enough stock. Available: " + std::to_string(availableStock) + 
-                                      ", needed: " + std::to_string(qty));
+            throw ValidationException(std::format("not enough stock. Available: {}, needed: {}", availableStock, qty));
         }
         
         try {
             productService_->decreaseStock(key, qty);
             productService_->save();
-        } catch (const ValidationException& e) {
+        } catch (const ValidationException&) {
             throw;
-        } catch (const NotFoundException& e) {
+        } catch (const NotFoundException&) {
             throw ValidationException("product not found: " + key);
         }
     }
@@ -83,11 +84,12 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
 
 void OrderService::removeItem(Order& o, const std::string& name) {
     std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
-    auto it = o.items.find(key);
-    if (it == o.items.end()) throw NotFoundException("item not found in this order");
-    
-    int qty = it->second;
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
+    const auto it = o.items.find(key);
+    if (it == o.items.end()) {
+        throw NotFoundException("item not found in this order");
+    }
+    const int qty = it->second;
     o.items.erase(it);
     
     if (o.status != "canceled" && productService_) {
@@ -100,24 +102,22 @@ void OrderService::removeItem(Order& o, const std::string& name) {
     persist();
 }
 
-void OrderService::returnItemsToStock(Order& o) {
+void OrderService::returnItemsToStock(const Order& o) {
     if (!productService_) return;
-    for (const auto& kv : o.items) {
-        productService_->increaseStock(kv.first, kv.second);
+    for (const auto& [itemKey, qty] : o.items) {
+        productService_->increaseStock(itemKey, qty);
     }
     productService_->save();
 }
 
-void OrderService::removeItemsFromStock(Order& o) {
+void OrderService::removeItemsFromStock(const Order& o) {
     if (!productService_) return;
-    for (const auto& kv : o.items) {
-        if (!productService_->hasEnoughStock(kv.first, kv.second)) {
-            int available = productService_->getStock(kv.first);
-            throw ValidationException("not enough stock for " + kv.first + 
-                                      ". Available: " + std::to_string(available) + 
-                                      ", needed: " + std::to_string(kv.second));
+    for (const auto& [itemKey, qty] : o.items) {
+        if (!productService_->hasEnoughStock(itemKey, qty)) {
+            const int available = productService_->getStock(itemKey);
+            throw ValidationException(std::format("not enough stock for {}. Available: {}, needed: {}", itemKey, available, qty));
         }
-        productService_->decreaseStock(kv.first, kv.second);
+        productService_->decreaseStock(itemKey, qty);
     }
     productService_->save();
 }
@@ -133,7 +133,7 @@ void OrderService::setStatus(Order& o, const std::string& s) {
         if (oldStatus == "canceled" && s != "canceled") {
             try {
                 removeItemsFromStock(o);
-            } catch (const ValidationException& e) {
+            } catch (const ValidationException&) {
                 o.status = oldStatus;
                 throw;
             }
@@ -154,20 +154,20 @@ const Order* OrderService::findById(int id) const {
 }
 
 void OrderService::sortById() {
-    std::sort(data_.begin(), data_.end(), [](const Order& a, const Order& b) {
+    std::ranges::sort(data_, [](const Order& a, const Order& b) {
         return a.id < b.id;
     });
 }
 
 double OrderService::revenue() const {
     double s = 0;
-    for (auto& o : data_) s += o.total;
+    for (const auto& o : data_) s += o.total;
     return std::round(s * 100.0) / 100.0;
 }
 
 void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
     std::string key = productKey;
-    std::ranges::transform(key, key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
     
     bool changed = false;
     for (auto& order : data_) {
@@ -188,7 +188,7 @@ void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
 
 void OrderService::save() {
     std::vector<Order> temp;
-    for (auto& o : data_) {
+    for (const auto& o : data_) {
         Order c = o;
         c.total = c.calcTotal(price_);
         c.total = std::round(c.total * 100.0) / 100.0;
@@ -200,7 +200,7 @@ void OrderService::save() {
 void OrderService::load() {
     auto loaded = repo_.load();
     data_.clear();
-    for (auto& o : loaded) {
+    for (const auto& o : loaded) {
         Order c = o;
         c.total = c.calcTotal(price_);
         c.total = std::round(c.total * 100.0) / 100.0;

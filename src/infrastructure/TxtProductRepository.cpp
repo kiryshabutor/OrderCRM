@@ -15,17 +15,15 @@ static inline void trim(std::string& s) {
 }
 
 static inline std::string toLower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(),
+    std::ranges::transform(s, s.begin(),
                    [](unsigned char c){ return std::tolower(c); });
     return s;
 }
 
 static inline double parse_price(std::string s) {
     trim(s);
-    std::replace(s.begin(), s.end(), ',', '.');
-    s.erase(std::remove_if(s.begin(), s.end(),
-                           [](unsigned char c){ return std::isspace(c); }),
-            s.end());
+    std::ranges::replace(s, ',', '.');
+    std::erase_if(s, [](unsigned char c){ return std::isspace(c); });
     std::stringstream ss(s);
     ss.imbue(std::locale::classic());
     double v = 0.0;
@@ -36,9 +34,7 @@ static inline double parse_price(std::string s) {
 
 static inline int parse_int(std::string s) {
     trim(s);
-    s.erase(std::remove_if(s.begin(), s.end(),
-                           [](unsigned char c){ return std::isspace(c); }),
-            s.end());
+    std::erase_if(s, [](unsigned char c){ return std::isspace(c); });
     if (s.empty()) return 0;
     return std::stoi(s);
 }
@@ -53,7 +49,9 @@ std::map<std::string, Product, std::less<>> TxtProductRepository::load() {
     std::string line;
     while (std::getline(in, line)) {
         if (line.empty()) continue;
-        std::string name, priceStr, stockStr;
+        std::string name;
+        std::string priceStr;
+        std::string stockStr;
         std::stringstream ss(line);
         std::getline(ss, name, ';');
         std::getline(ss, priceStr, ';');

@@ -179,45 +179,16 @@ void StatisticsWindow::paintEvent(QPaintEvent* event) {
     x = margin + 15;
     baseY = revenueChartY + chartHeight;
     
-    auto drawAnimatedRevenueBar = [&](double revenue, const QColor& color, const QString& statusName) {
-        if (revenue < 0) return;
-        int targetHeight = maxRevenue > 0 ? static_cast<int>((revenue * chartHeight) / maxRevenue) : 0;
-        auto animatedHeight = static_cast<int>(targetHeight * animationProgress_);
-        QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
-        
-        if (!barRect.isEmpty()) {
-            drawBarWithGradient(painter, barRect, color);
-        }
-        
-        painter.setPen(QPen(Qt::white));
-        painter.setFont(QFont("Arial", 9, QFont::Bold));
-        painter.drawText(QRect(x, baseY + 10, barWidth, 30), Qt::AlignCenter, statusName);
-        
-        QString revenueText = "$" + QString::number(revenue, 'f', 2);
-        QFontMetrics fm(QFont("Arial", 9, QFont::Bold));
-        int textWidth = fm.horizontalAdvance(revenueText);
-        
-        painter.setPen(QPen(Qt::white));
-        painter.setFont(QFont("Arial", 9, QFont::Bold));
-        
-        if (animatedHeight > 30 && textWidth < barWidth - 4) {
-            painter.drawText(barRect, Qt::AlignCenter, revenueText);
-        } else {
-            int textY = baseY - animatedHeight - 5;
-            painter.drawText(QRect(x, textY - 15, barWidth, 15), Qt::AlignCenter, revenueText);
-        }
-    };
-    
-    drawAnimatedRevenueBar(stats_.newRevenue, newColor, "New");
+    drawAnimatedRevenueBar(painter, stats_.newRevenue, newColor, "New", x, baseY, barWidth, chartHeight, maxRevenue);
     x += barWidth + 15;
     
-    drawAnimatedRevenueBar(stats_.inProgressRevenue, inProgressColor, "In Progress");
+    drawAnimatedRevenueBar(painter, stats_.inProgressRevenue, inProgressColor, "In Progress", x, baseY, barWidth, chartHeight, maxRevenue);
     x += barWidth + 15;
     
-    drawAnimatedRevenueBar(stats_.doneRevenue, doneColor, "Done");
+    drawAnimatedRevenueBar(painter, stats_.doneRevenue, doneColor, "Done", x, baseY, barWidth, chartHeight, maxRevenue);
     x += barWidth + 15;
     
-    drawAnimatedRevenueBar(stats_.canceledRevenue, canceledColor, "Canceled");
+    drawAnimatedRevenueBar(painter, stats_.canceledRevenue, canceledColor, "Canceled", x, baseY, barWidth, chartHeight, maxRevenue);
     
     painter.setFont(QFont("Arial", 16, QFont::Bold));
     painter.setPen(QPen(Qt::white));
@@ -265,5 +236,35 @@ void StatisticsWindow::paintEvent(QPaintEvent* event) {
     painter.drawRect(legendRect4);
     painter.setPen(QPen(Qt::white));
     painter.drawText(QRect(legendX + 3 * legendSpacing + 20, legendY, 80, 15), Qt::AlignLeft | Qt::AlignVCenter, "Canceled");
+}
+
+void StatisticsWindow::drawAnimatedRevenueBar(QPainter& painter, double revenue, const QColor& color, const QString& statusName,
+                                               int x, int baseY, int barWidth, int chartHeight, double maxRevenue) const {
+    if (revenue < 0) return;
+    const int targetHeight = maxRevenue > 0 ? static_cast<int>((revenue * chartHeight) / maxRevenue) : 0;
+    const auto animatedHeight = static_cast<int>(targetHeight * animationProgress_);
+    QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
+    
+    if (!barRect.isEmpty()) {
+        drawBarWithGradient(painter, barRect, color);
+    }
+    
+    painter.setPen(QPen(Qt::white));
+    painter.setFont(QFont("Arial", 9, QFont::Bold));
+    painter.drawText(QRect(x, baseY + 10, barWidth, 30), Qt::AlignCenter, statusName);
+    
+    const QString revenueText = "$" + QString::number(revenue, 'f', 2);
+    QFontMetrics fm(QFont("Arial", 9, QFont::Bold));
+    const int textWidth = fm.horizontalAdvance(revenueText);
+    
+    painter.setPen(QPen(Qt::white));
+    painter.setFont(QFont("Arial", 9, QFont::Bold));
+    
+    if (animatedHeight > 30 && textWidth < barWidth - 4) {
+        painter.drawText(barRect, Qt::AlignCenter, revenueText);
+    } else {
+        const int textY = baseY - animatedHeight - 5;
+        painter.drawText(QRect(x, textY - 15, barWidth, 15), Qt::AlignCenter, revenueText);
+    }
 }
 

@@ -43,5 +43,7 @@ private:
     StatusStats stats_;
     
     void drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow = true) const;
+    void drawAnimatedRevenueBar(QPainter& painter, double revenue, const QColor& color, const QString& statusName, 
+                                 int x, int baseY, int barWidth, int chartHeight, double maxRevenue) const;
 };
 

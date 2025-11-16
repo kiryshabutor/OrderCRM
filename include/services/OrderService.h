@@ -19,8 +19,8 @@ private:
     IRepository& repo_;
     ProductService* productService_{nullptr};
     void persist();
-    void returnItemsToStock(Order& o);
-    void removeItemsFromStock(Order& o);
+    void returnItemsToStock(const Order& o);
+    void removeItemsFromStock(const Order& o);
 public:
     explicit OrderService(IRepository& repo) : repo_(repo) {}
 

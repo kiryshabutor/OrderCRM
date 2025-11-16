@@ -22,10 +22,9 @@ static std::string now_iso8601() {
 
 double Order::calcTotal(const std::map<std::string, double, std::less<>>& priceList) const {
     double s = 0.0;
-    for (auto& kv : items) {
-        auto it = priceList.find(kv.first);
-        if (it != priceList.end())
-            s += it->second * kv.second;
+    for (const auto& [itemKey, qty] : items) {
+        if (const auto it = priceList.find(itemKey); it != priceList.end())
+            s += it->second * qty;
     }
     return std::round(s * 100.0) / 100.0;
 }
@@ -36,9 +35,9 @@ std::string Order::toLine() const {
     os << std::setprecision(2);
     os << id << ';' << client << ';' << status << ';' << total << ';' << createdAt << ';';
     bool first = true;
-    for (auto& kv : items) {
+    for (const auto& [itemKey, qty] : items) {
         if (!first) os << ',';
-        os << kv.first << ':' << kv.second;
+        os << itemKey << ':' << qty;
         first = false;
     }
     return os.str();
@@ -47,7 +46,12 @@ std::string Order::toLine() const {
 std::optional<Order> Order::fromLine(const std::string& line) {
     std::istringstream ss(line);
     Order o;
-    std::string idStr, clientStr, statusStr, totalStr, createdStr, itemsStr;
+    std::string idStr;
+    std::string clientStr;
+    std::string statusStr;
+    std::string totalStr;
+    std::string createdStr;
+    std::string itemsStr;
 
     if (!std::getline(ss, idStr, ';')) return std::nullopt;
     if (!std::getline(ss, clientStr, ';')) return std::nullopt;
@@ -56,8 +60,7 @@ std::optional<Order> Order::fromLine(const std::string& line) {
 
     std::string rest;
     std::getline(ss, rest);
-    std::istringstream restStream(rest);
-    if (std::getline(restStream, createdStr, ';')) {
+    if (std::istringstream restStream(rest); std::getline(restStream, createdStr, ';')) {
         std::getline(restStream, itemsStr);
     } else {
         createdStr.clear();
@@ -69,7 +72,7 @@ std::optional<Order> Order::fromLine(const std::string& line) {
     o.status = statusStr;
     {
         std::string t = totalStr;
-        std::replace(t.begin(), t.end(), ',', '.');
+        std::ranges::replace(t, ',', '.');
         double v = std::stod(t);
         o.total = std::round(v * 100.0) / 100.0;
     }
@@ -78,23 +81,13 @@ std::optional<Order> Order::fromLine(const std::string& line) {
     std::istringstream itemStream(itemsStr);
     std::string pair;
     while (std::getline(itemStream, pair, ',')) {
-        size_t pos = pair.find(':');
+        const size_t pos = pair.find(':');
         if (pos != std::string::npos) {
-            std::string name = pair.substr(0, pos);
-            int qty = std::stoi(pair.substr(pos + 1));
+            const std::string name = pair.substr(0, pos);
+            const int qty = std::stoi(pair.substr(pos + 1));
             o.items[name] = qty;
         }
     }
     return o;
 }
 
-std::ostream& operator<<(std::ostream& os, const Order& o) {
-    os << "Order #" << o.id << " (" << o.client << ") [" << o.status << "]\n";
-    for (auto& kv : o.items)
-        os << "  " << kv.first << " x" << kv.second << "\n";
-    os.setf(std::ios::fixed);
-    os << std::setprecision(2);
-    os << "Total: " << o.total << "\n";
-    os << "CreatedAt: " << o.createdAt << "\n";
-    return os;
-}

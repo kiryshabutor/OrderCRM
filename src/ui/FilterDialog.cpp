@@ -10,17 +10,7 @@
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
 
-FilterDialog::FilterDialog(const QString& currentClient,
-                           const QString& currentStatus,
-                           const QString& minTotal,
-                           const QString& maxTotal,
-                           const QString& minId,
-                           const QString& maxId,
-                           const QDateTime& fromDt,
-                           bool useFrom,
-                           const QDateTime& toDt,
-                           bool useTo,
-                           QWidget* parent)
+FilterDialog::FilterDialog(const FilterParams& params, QWidget* parent)
     : QDialog(parent) {
     setWindowTitle("Filter Orders");
     auto* root = new QVBoxLayout(this);
@@ -28,15 +18,15 @@ FilterDialog::FilterDialog(const QString& currentClient,
     auto* form = new QFormLayout();
     clientEdit_ = new QLineEdit(this);
     clientEdit_->setPlaceholderText("Enter client name");
-    clientEdit_->setText(currentClient);
+    clientEdit_->setText(params.currentClient);
 
     statusCombo_ = new QComboBox(this);
     statusCombo_->addItems({"Any", "new", "in_progress", "done", "canceled"});
     int idx = 0;
-    if (currentStatus == "new") idx = 1;
-    else if (currentStatus == "in_progress") idx = 2;
-    else if (currentStatus == "done") idx = 3;
-    else if (currentStatus == "canceled") idx = 4;
+    if (params.currentStatus == "new") idx = 1;
+    else if (params.currentStatus == "in_progress") idx = 2;
+    else if (params.currentStatus == "done") idx = 3;
+    else if (params.currentStatus == "canceled") idx = 4;
     statusCombo_->setCurrentIndex(idx);
 
     QRegularExpression intRe("^[0-9]*$");
@@ -44,22 +34,22 @@ FilterDialog::FilterDialog(const QString& currentClient,
 
     minTotalEdit_ = new QLineEdit(this);
     minTotalEdit_->setPlaceholderText("min total");
-    minTotalEdit_->setText(minTotal);
+    minTotalEdit_->setText(params.minTotal);
     minTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
 
     maxTotalEdit_ = new QLineEdit(this);
     maxTotalEdit_->setPlaceholderText("max total");
-    maxTotalEdit_->setText(maxTotal);
+    maxTotalEdit_->setText(params.maxTotal);
     maxTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
 
     minIdEdit_ = new QLineEdit(this);
     minIdEdit_->setPlaceholderText("min id");
-    minIdEdit_->setText(minId);
+    minIdEdit_->setText(params.minId);
     minIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
 
     maxIdEdit_ = new QLineEdit(this);
     maxIdEdit_->setPlaceholderText("max id");
-    maxIdEdit_->setText(maxId);
+    maxIdEdit_->setText(params.maxId);
     maxIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
 
     auto* dateRowFrom = new QHBoxLayout();
@@ -67,8 +57,8 @@ FilterDialog::FilterDialog(const QString& currentClient,
     fromDateEdit_ = new QDateTimeEdit(this);
     fromDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
     fromDateEdit_->setCalendarPopup(true);
-    fromDateEdit_->setDateTime(fromDt.isValid() ? fromDt : QDateTime::currentDateTime());
-    useFromCheck_->setChecked(useFrom);
+    fromDateEdit_->setDateTime(params.fromDt.isValid() ? params.fromDt : QDateTime::currentDateTime());
+    useFromCheck_->setChecked(params.useFrom);
     dateRowFrom->addWidget(useFromCheck_);
     dateRowFrom->addWidget(fromDateEdit_);
 
@@ -77,8 +67,8 @@ FilterDialog::FilterDialog(const QString& currentClient,
     toDateEdit_ = new QDateTimeEdit(this);
     toDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
     toDateEdit_->setCalendarPopup(true);
-    toDateEdit_->setDateTime(toDt.isValid() ? toDt : QDateTime::currentDateTime());
-    useToCheck_->setChecked(useTo);
+    toDateEdit_->setDateTime(params.toDt.isValid() ? params.toDt : QDateTime::currentDateTime());
+    useToCheck_->setChecked(params.useTo);
     dateRowTo->addWidget(useToCheck_);
     dateRowTo->addWidget(toDateEdit_);
 

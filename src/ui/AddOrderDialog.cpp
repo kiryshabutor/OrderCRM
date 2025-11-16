@@ -9,7 +9,7 @@
 #include <QSet>
 
 AddOrderDialog::AddOrderDialog(OrderService& svc, QWidget* parent)
-    : QDialog(parent), svc_(svc), clientCompleter_(nullptr) {
+    : QDialog(parent), svc_(svc) {
     setWindowTitle("Add order");
     auto* root = new QVBoxLayout(this);
     auto* form = new QFormLayout();

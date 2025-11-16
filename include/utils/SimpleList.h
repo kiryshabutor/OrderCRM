@@ -5,13 +5,13 @@
 template<typename T>
 class SimpleList {
 private:
-    T* data_;
-    size_t size_;
-    size_t capacity_;
+    T* data_{nullptr};
+    size_t size_{0};
+    size_t capacity_{0};
 
     void ensure_capacity(size_t newCap) {
         if (newCap <= capacity_) return;
-        T* newData = new T[newCap];
+        auto* newData = new T[newCap];
         for (size_t i = 0; i < size_; ++i)
             newData[i] = data_[i];
         delete[] data_;
@@ -22,8 +22,51 @@ private:
 public:
     using value_type = T;
 
-    SimpleList() : data_(nullptr), size_(0), capacity_(0) {}
+    SimpleList() = default;
     ~SimpleList() { delete[] data_; }
+    
+    SimpleList(const SimpleList& other) : size_(other.size_), capacity_(other.capacity_) {
+        if (capacity_ > 0) {
+            data_ = new T[capacity_];
+            for (size_t i = 0; i < size_; ++i)
+                data_[i] = other.data_[i];
+        }
+    }
+    
+    SimpleList& operator=(const SimpleList& other) {
+        if (this != &other) {
+            delete[] data_;
+            size_ = other.size_;
+            capacity_ = other.capacity_;
+            if (capacity_ > 0) {
+                data_ = new T[capacity_];
+                for (size_t i = 0; i < size_; ++i)
+                    data_[i] = other.data_[i];
+            } else {
+                data_ = nullptr;
+            }
+        }
+        return *this;
+    }
+    
+    SimpleList(SimpleList&& other) noexcept : data_(other.data_), size_(other.size_), capacity_(other.capacity_) {
+        other.data_ = nullptr;
+        other.size_ = 0;
+        other.capacity_ = 0;
+    }
+    
+    SimpleList& operator=(SimpleList&& other) noexcept {
+        if (this != &other) {
+            delete[] data_;
+            data_ = other.data_;
+            size_ = other.size_;
+            capacity_ = other.capacity_;
+            other.data_ = nullptr;
+            other.size_ = 0;
+            other.capacity_ = 0;
+        }
+        return *this;
+    }
 
     void push_back(const T& value) {
         if (size_ == capacity_)

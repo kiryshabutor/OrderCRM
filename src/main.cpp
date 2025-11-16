@@ -11,7 +11,7 @@
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
-    std::filesystem::path appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+    const auto appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
 
     std::filesystem::path dbDir       = appDir / "db";
     std::filesystem::path ordersPath  = dbDir / "orders.txt";
@@ -29,15 +29,23 @@ int main(int argc, char *argv[]) {
     TxtProductRepository productRepo(productsPath.string());
 
     ProductService productSvc(productRepo);
-    try { productSvc.load(); } catch (...) {}
+    try { 
+        productSvc.load(); 
+    } catch (...) {
+        // Ignore loading errors on startup
+    }
 
     OrderService orderSvc(orderRepo);
     orderSvc.setProductService(&productSvc);
     orderSvc.setPrices(productSvc.all());
-    try { orderSvc.load(); } catch (...) {}
+    try { 
+        orderSvc.load(); 
+    } catch (...) {
+        // Ignore loading errors on startup
+    }
 
     MainWindow w(orderSvc, productSvc);
     w.show();
 
-    return app.exec();
+    return QApplication::exec();
 }

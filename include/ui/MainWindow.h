@@ -19,53 +19,37 @@ class StatisticsWindow;
 class QDateTimeEdit;
 class QCheckBox;
 
-class MainWindow : public QMainWindow {
-    Q_OBJECT
-private:
-    OrderService& svc_;
-    ProductService& productSvc_;
-    ValidationService V_;
+struct OrderStatsLabels {
+    QLabel* newLabel_{nullptr};
+    QLabel* inProgressLabel_{nullptr};
+    QLabel* doneLabel_{nullptr};
+    QLabel* canceledLabel_{nullptr};
+    QLabel* totalRevenueLabel_{nullptr};
+};
 
-    QTabWidget* tabs_;
-    
-    QTableWidget* table_;
-    QPushButton* addOrderBtn_;
-    QPushButton* reportBtn_;
+struct ProductStatsLabels {
+    QLabel* lowStockLabel_{nullptr};
+    QLabel* highStockLabel_{nullptr};
+    QLabel* expensiveLabel_{nullptr};
+    QLabel* cheapLabel_{nullptr};
+    QLabel* totalCountLabel_{nullptr};
+    QLabel* totalValueLabel_{nullptr};
+};
 
-    QPushButton* clearFilterBtn_;
-    QLabel* titleLabel_;
-    
-    QLabel* statsNewLabel_;
-    QLabel* statsInProgressLabel_;
-    QLabel* statsDoneLabel_;
-    QLabel* statsCanceledLabel_;
-    QLabel* statsTotalRevenueLabel_;
-    QPushButton* openChartsBtn_;
+struct FilterWidgets {
+    QLineEdit* clientEdit_{nullptr};
+    QComboBox* statusCombo_{nullptr};
+    QLineEdit* minTotalEdit_{nullptr};
+    QLineEdit* maxTotalEdit_{nullptr};
+    QLineEdit* minIdEdit_{nullptr};
+    QLineEdit* maxIdEdit_{nullptr};
+    QCheckBox* useFromCheck_{nullptr};
+    QDateTimeEdit* fromDateEdit_{nullptr};
+    QCheckBox* useToCheck_{nullptr};
+    QDateTimeEdit* toDateEdit_{nullptr};
+};
 
-    QLineEdit* clientFilterEdit_;
-    QComboBox* statusFilterCombo_;
-    QLineEdit* minTotalEdit_;
-    QLineEdit* maxTotalEdit_;
-    QLineEdit* minIdEdit_;
-    QLineEdit* maxIdEdit_;
-    QCheckBox* useFromCheck_;
-    QDateTimeEdit* fromDateEdit_;
-    QCheckBox* useToCheck_;
-    QDateTimeEdit* toDateEdit_;
-
-    QTableWidget* productTable_;
-    QPushButton* addProductBtn_;
-    QLabel* productStatsLowStockLabel_;
-    QLabel* productStatsHighStockLabel_;
-    QLabel* productStatsExpensiveLabel_;
-    QLabel* productStatsCheapLabel_;
-    QLabel* productStatsTotalCountLabel_;
-    QLabel* productStatsTotalValueLabel_;
-
-    StatisticsWindow* statisticsWindow_{nullptr};
-    QCompleter* clientFilterCompleter_{nullptr};
-    QStringListModel* clientFilterModel_{nullptr};
-
+struct FilterState {
     QString activeClientFilter_;
     QString activeStatusFilter_;
     QString minTotalText_;
@@ -76,10 +60,47 @@ private:
     QDateTime toDate_;
     bool useFrom_{false};
     bool useTo_{false};
+};
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+private:
+    OrderService& svc_;
+    ProductService& productSvc_;
+    ValidationService V_;
+
+    QTabWidget* tabs_;
+    QTableWidget* table_;
+    QPushButton* addOrderBtn_;
+    QPushButton* reportBtn_;
+    QPushButton* clearFilterBtn_;
+    QLabel* titleLabel_;
+    QPushButton* openChartsBtn_;
+    
+    OrderStatsLabels orderStats_;
+    ProductStatsLabels productStats_;
+    FilterWidgets filterWidgets_;
+    FilterState filterState_;
+
+    QTableWidget* productTable_;
+    QPushButton* addProductBtn_;
+
+    StatisticsWindow* statisticsWindow_{nullptr};
+    QCompleter* clientFilterCompleter_{nullptr};
+    QStringListModel* clientFilterModel_{nullptr};
 
     QList<const Order*> currentFilteredRows() const;
     void applyFilters();
     void setupCompleters();
+    bool matchesClientFilter(const Order& o) const;
+    bool matchesStatusFilter(const Order& o) const;
+    bool matchesTotalFilter(const Order& o) const;
+    bool matchesIdFilter(const Order& o) const;
+    bool matchesDateFilter(const Order& o) const;
+    void setupEmptyTableRow();
+    void populateTableRow(int row, const Order& o);
+    QString formatOrderItems(const Order& o) const;
+    QTableWidgetItem* createStatusCell(const Order& o) const;
 
 private slots:
     void onAddOrder();

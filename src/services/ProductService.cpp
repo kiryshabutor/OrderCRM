@@ -1,6 +1,7 @@
 #include "include/services/ProductService.h"
 #include <algorithm>
 #include <cmath>
+#include <ranges>
 
 ProductService::ProductService(IProductRepository& repo) : repo_(repo) {}
 
@@ -10,14 +11,14 @@ const std::map<std::string, Product, std::less<>>& ProductService::all() const {
 
 Product* ProductService::findProduct(const std::string& name) {
     std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
     auto it = products_.find(key);
     return it != products_.end() ? &it->second : nullptr;
 }
 
 const Product* ProductService::findProduct(const std::string& name) const {
     std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
     auto it = products_.find(key);
     return it != products_.end() ? &it->second : nullptr;
 }
@@ -45,7 +46,7 @@ void ProductService::addProduct(const std::string& name, double price, int stock
     V_.validate_price(price);
     if (stock < 0) throw ValidationException("stock cannot be negative");
     std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
     if (products_.contains(key))
         throw ValidationException("product already exists");
     double v = V_.normalize_money(price);
@@ -55,7 +56,7 @@ void ProductService::addProduct(const std::string& name, double price, int stock
 
 void ProductService::removeProduct(const std::string& name) {
     std::string key = name;
-    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    std::ranges::transform(key, key.begin(), [](unsigned char c){ return std::tolower(c); });
     auto it = products_.find(key);
     if (it == products_.end())
         throw NotFoundException("product not found");
@@ -63,9 +64,10 @@ void ProductService::removeProduct(const std::string& name) {
 }
 
 void ProductService::updateProduct(const std::string& oldName, const std::string& newName, double newPrice, int stock) {
-    std::string oldKey = oldName, newKey = newName;
-    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
-    std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+    std::string oldKey = oldName;
+    std::string newKey = newName;
+    std::ranges::transform(oldKey, oldKey.begin(), [](unsigned char c){ return std::tolower(c); });
+    std::ranges::transform(newKey, newKey.begin(), [](unsigned char c){ return std::tolower(c); });
     auto it = products_.find(oldKey);
     if (it == products_.end())
         throw NotFoundException("product not found");

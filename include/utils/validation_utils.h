@@ -23,7 +23,7 @@ public:
     void validate_qty(int qty) const {
         if (qty <= 0) throw ValidationException("qty must be positive");
     }
-    void validate_status(const std::string& s) {
+    void validate_status(std::string_view s) const {
         if (s != "new" && s != "in_progress" && s != "done" && s != "canceled")
             throw ValidationException("invalid status");
     }

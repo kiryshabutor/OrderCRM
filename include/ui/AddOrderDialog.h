@@ -11,7 +11,7 @@ private:
     OrderService& svc_;
     QLineEdit* clientEdit_;
     QDialogButtonBox* buttons_;
-    QCompleter* clientCompleter_;
+    QCompleter* clientCompleter_{nullptr};
     int createdId_{-1};
     
     void setupCompleter();
