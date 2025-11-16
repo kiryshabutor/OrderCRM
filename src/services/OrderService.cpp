@@ -69,8 +69,6 @@ void OrderService::addItem(Order& o, const std::string& item, int qty) {
         try {
             productService_->decreaseStock(key, qty);
             productService_->save();
-        } catch (const ValidationException& e) {
-            throw; // Re-throw validation exceptions as-is
         } catch (const NotFoundException&) {
             throw ValidationException("product not found: " + key);
         }

@@ -34,8 +34,6 @@ int main(int argc, char *argv[]) {
     } catch (const std::exception& e) {
         // Ignore loading errors on startup - file may not exist yet
         (void)e;
-    } catch (...) {
-        // Ignore any other loading errors on startup
     }
 
     OrderService orderSvc(orderRepo);
@@ -46,8 +44,6 @@ int main(int argc, char *argv[]) {
     } catch (const std::exception& e) {
         // Ignore loading errors on startup - file may not exist yet
         (void)e;
-    } catch (...) {
-        // Ignore any other loading errors on startup
     }
 
     MainWindow w(orderSvc, productSvc);
