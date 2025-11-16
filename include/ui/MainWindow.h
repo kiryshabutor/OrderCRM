@@ -77,7 +77,6 @@ private:
     bool useTo_{false};
 
     QList<const Order*> currentFilteredRows() const;
-    static QString sanitizedBaseName(const QString& raw);
     void applyFilters();
     void setupCompleters();
 

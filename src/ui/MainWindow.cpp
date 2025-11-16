@@ -9,6 +9,7 @@
 #include "include/core/Product.h"
 #include "include/core/Order.h"
 #include "include/Errors/CustomExceptions.h"
+#include "include/services/ReportService.h"
 #include <QVBoxLayout>
 #include <QIntValidator>
 #include <QDialog>
@@ -319,18 +320,6 @@ QList<const Order*> MainWindow::currentFilteredRows() const {
     return rows;
 }
 
-QString MainWindow::sanitizedBaseName(const QString& raw) {
-    QString base = raw.trimmed();
-    if (base.isEmpty()) base = "Report";
-    QString res;
-    for (QChar ch : base) {
-        if (ch.isLetterOrNumber() || ch == ' ' || ch == '_' || ch == '-' ) res.append(ch);
-        else res.append('_');
-    }
-    res = res.simplified();
-    res.replace(' ', '_');
-    return res;
-}
 
 void MainWindow::refreshTable() {
     table_->setSortingEnabled(false);
@@ -543,97 +532,33 @@ void MainWindow::onOpenReportDialog() {
         return;
     }
 
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QDir reportsDir(baseDir + "/reports");
-    reportsDir.mkpath(".");
-    QString base = sanitizedBaseName(dlg.reportName());
-    QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
-    QString fileName = reportsDir.filePath(QString("%1_%2.csv").arg(base, ts));
-    QFile f(fileName);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    ReportFilterInfo filterInfo;
+    filterInfo.clientFilter = activeClientFilter_;
+    filterInfo.statusFilter = activeStatusFilter_;
+    filterInfo.minTotal = minTotalText_;
+    filterInfo.maxTotal = maxTotalText_;
+    filterInfo.minId = minIdText_;
+    filterInfo.maxId = maxIdText_;
+    filterInfo.fromDate = fromDate_;
+    filterInfo.toDate = toDate_;
+    filterInfo.useFrom = useFrom_;
+    filterInfo.useTo = useTo_;
+
+    QString fileName = ReportService::generateReport(
+        rows,
+        dlg.reportName(),
+        dlg.scopeFiltered(),
+        dlg.includeFiltersHeader(),
+        dlg.includeSummarySection(),
+        filterInfo,
+        svc_
+    );
+
+    if (fileName.isEmpty()) {
         QMessageBox::warning(this, "error", "cannot create report file");
         return;
     }
-    QTextStream out(&f);
-    out.setEncoding(QStringConverter::Encoding::Utf8);
-    out.setRealNumberNotation(QTextStream::FixedNotation);
-    out.setRealNumberPrecision(2);
 
-    out << "Order Report: " << base << " [" << ts << "]\n";
-    out << "Scope: " << (dlg.scopeFiltered() ? "Current filter" : "All orders") << "\n";
-    
-    if (dlg.includeFiltersHeader()) {
-        out << "\n";
-        out << "Filters:\n";
-        out << "Client," << (activeClientFilter_.isEmpty() ? "-" : activeClientFilter_) << "\n";
-        out << "Status," << (activeStatusFilter_.isEmpty() ? "-" : activeStatusFilter_) << "\n";
-        out << "Total min," << (minTotalText_.isEmpty() ? "-" : minTotalText_) << "\n";
-        out << "Total max," << (maxTotalText_.isEmpty() ? "-" : maxTotalText_) << "\n";
-        out << "ID min," << (minIdText_.isEmpty() ? "-" : minIdText_) << "\n";
-        out << "ID max," << (maxIdText_.isEmpty() ? "-" : maxIdText_) << "\n";
-        out << "From," << (useFrom_ ? fromDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
-        out << "To," << (useTo_ ? toDate_.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
-    }
-    
-    out << "\n";
-    out << "Orders: " << rows.size() << "\n";
-    out << "\n";
-
-    out << "Order ID,Client,Status,Total,Created At,Items\n";
-
-    double totalSum = 0.0;
-    QMap<QString, QPair<int,double>> statusAgg;
-
-    for (const Order* op : rows) {
-        const Order& o = *op;
-        totalSum += o.total;
-        statusAgg[qs(o.status)].first += 1;
-        statusAgg[qs(o.status)].second += o.total;
-
-        QString itemsStr;
-        bool firstItem = true;
-        for (auto& kv : o.items) {
-            if (!firstItem) itemsStr += "; ";
-            auto pit = svc_.price().find(kv.first);
-            QString priceText = (pit != svc_.price().end())
-                ? QString::number(pit->second, 'f', 2)
-                : QString("n/a");
-            itemsStr += QString("%1 x%2 (@%3)").arg(qs(kv.first)).arg(kv.second).arg(priceText);
-            firstItem = false;
-        }
-        if (itemsStr.isEmpty()) itemsStr = "-";
-
-        QString client = qs(o.client);
-        client.replace("\"", "\"\"");
-        if (client.contains(',') || client.contains('"') || client.contains('\n')) {
-            client = "\"" + client + "\"";
-        }
-
-        QString status = qs(o.status);
-        QString createdAt = qs(o.createdAt);
-        createdAt.replace("T", " ");
-
-        itemsStr.replace("\"", "\"\"");
-        if (itemsStr.contains(',') || itemsStr.contains('"') || itemsStr.contains('\n')) {
-            itemsStr = "\"" + itemsStr + "\"";
-        }
-
-        out << o.id << ","
-            << client << ","
-            << status << ","
-            << QString::number(o.total, 'f', 2) << ","
-            << createdAt << ","
-            << itemsStr << "\n";
-    }
-
-    out << "\n";
-    if (dlg.includeSummarySection()) {
-        out << "Summary:\n";
-        out << "Total Orders," << rows.size() << "\n";
-        out << "Total Revenue," << QString::number(totalSum, 'f', 2) << "\n";
-    }
-
-    f.close();
     QMessageBox::information(this, "report", QString("Excel report created: %1").arg(fileName));
 }
 
