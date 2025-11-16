@@ -8,18 +8,6 @@
 #include <QPushButton>
 #include <cmath>
 
-static double parsePrice(const QString& input) {
-    QString s = input.trimmed();
-    if (s.isEmpty()) throw ValidationException("price cannot be empty");
-    s.replace(',', '.');
-    bool ok = false;
-    double price = s.toDouble(&ok);
-    if (!ok || price <= 0.0) throw ValidationException("invalid price");
-    double cents = std::round(price * 100.0);
-    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
-    price = cents / 100.0;
-    return price;
-}
 
 AddProductDialog::AddProductDialog(ProductService& productSvc, QWidget* parent)
     : QDialog(parent), productSvc_(productSvc) {

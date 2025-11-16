@@ -21,18 +21,6 @@
 #include <cmath>
 #include <string_view>
 
-static double parsePrice(const QString& input) {
-    QString s = input.trimmed();
-    if (s.isEmpty()) throw ValidationException("price cannot be empty");
-    s.replace(',', '.');
-    bool ok = false;
-    double price = s.toDouble(&ok);
-    if (!ok || price <= 0.0) throw ValidationException("invalid price");
-    double cents = std::round(price * 100.0);
-    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
-    price = cents / 100.0;
-    return price;
-}
 
 ProductWindow::ProductWindow(ProductService& productSvc, OrderService& orderSvc, QWidget* parent)
     : QMainWindow(parent), productSvc_(productSvc), orderSvc_(orderSvc) {
@@ -89,68 +77,18 @@ void ProductWindow::refreshProducts() {
         productTable_->setItem(i, 1, priceCell);
         productTable_->setItem(i, 2, stockCell);
         
-        auto* editBtn = new QPushButton("⚙️", this);
-        editBtn->setStyleSheet(
-            "QPushButton {"
-            "background-color: #2196F3;"
-            "color: white;"
-            "border: none;"
-            "padding: 4px 8px;"
-            "border-radius: 4px;"
-            "font-size: 14px;"
-            "}"
-            "QPushButton:hover {"
-            "background-color: #1976D2;"
-            "}"
-            "QPushButton:pressed {"
-            "background-color: #0D47A1;"
-            "}"
-        );
-        editBtn->setToolTip("Edit product");
-        editBtn->setFixedSize(35, 25);
+        auto* editBtn = createEditButton(this, "Edit product");
         connect(editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
             onEditProduct(productKey, productName);
         });
         
-        auto* deleteBtn = new QPushButton("❌", this);
-        deleteBtn->setStyleSheet(
-            "QPushButton {"
-            "background-color: #F44336;"
-            "color: white;"
-            "border: none;"
-            "padding: 4px 8px;"
-            "border-radius: 4px;"
-            "font-size: 14px;"
-            "}"
-            "QPushButton:hover {"
-            "background-color: #D32F2F;"
-            "}"
-            "QPushButton:pressed {"
-            "background-color: #B71C1C;"
-            "}"
-        );
-        deleteBtn->setToolTip("Delete product");
-        deleteBtn->setFixedSize(35, 25);
+        auto* deleteBtn = createDeleteButton(this, "Delete product");
         connect(deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
             onDeleteProduct(productKey, productName);
         });
         
-        auto* editContainer = new QWidget(this);
-        auto* editLayout = new QHBoxLayout(editContainer);
-        editLayout->setContentsMargins(0, 0, 0, 0);
-        editLayout->addStretch();
-        editLayout->addWidget(editBtn);
-        editLayout->addStretch();
-        
-        auto* deleteContainer = new QWidget(this);
-        auto* deleteLayout = new QHBoxLayout(deleteContainer);
-        deleteLayout->setContentsMargins(0, 0, 0, 0);
-        deleteLayout->addStretch();
-        deleteLayout->addWidget(deleteBtn);
-        deleteLayout->addStretch();
-        
-        productTable_->setCellWidget(i, 3, editContainer);
-        productTable_->setCellWidget(i, 4, deleteContainer);
+        productTable_->setCellWidget(i, 3, createButtonContainer(this, editBtn));
+        productTable_->setCellWidget(i, 4, createButtonContainer(this, deleteBtn));
         
         ++i;
     }
@@ -276,31 +214,15 @@ void ProductWindow::onEditProduct([[maybe_unused]] std::string_view productKey, 
     editDialog->setWindowTitle("Edit Product");
     editDialog->setModal(true);
     
-    auto* layout = new QVBoxLayout(editDialog);
-    auto* form = new QFormLayout();
-    
-    auto* nameEdit = new QLineEdit(editDialog);
-    nameEdit->setText(qs(product->name));
-    form->addRow("Product name:", nameEdit);
-    
-    auto* priceEdit = new QLineEdit(editDialog);
-    priceEdit->setText(QString::number(product->price, 'f', 2));
-    form->addRow("Price:", priceEdit);
-    
-    auto* stockEdit = new QLineEdit(editDialog);
-    stockEdit->setText(QString::number(product->stock));
-    stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
-    form->addRow("Stock:", stockEdit);
-    
-    layout->addLayout(form);
+    auto fields = createProductEditDialogFields(editDialog, qs(product->name), product->price, product->stock);
     
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
     buttons->button(QDialogButtonBox::Ok)->setText("Save");
-    layout->addWidget(buttons);
+    qobject_cast<QVBoxLayout*>(editDialog->layout())->addWidget(buttons);
     
-        connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, oldName = std::string(productName)]() {
-            handleProductEditSave(nameEdit, priceEdit, stockEdit, oldName, editDialog);
-        });
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit = fields.nameEdit, priceEdit = fields.priceEdit, stockEdit = fields.stockEdit, oldName = std::string(productName)]() {
+        handleProductEditSave(nameEdit, priceEdit, stockEdit, oldName, editDialog);
+    });
     
     connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
     

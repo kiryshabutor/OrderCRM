@@ -142,48 +142,12 @@ void EditOrderDialog::refreshItemsTable() {
         qtyItem->setTextAlignment(Qt::AlignCenter);
         itemsTable_->setItem(row, 1, qtyItem);
         
-        auto* editBtn = new QPushButton("⚙️", this);
-        editBtn->setStyleSheet(
-            "QPushButton {"
-            "background-color: #2196F3;"
-            "color: white;"
-            "border: none;"
-            "padding: 4px 8px;"
-            "border-radius: 4px;"
-            "font-size: 14px;"
-            "}"
-            "QPushButton:hover {"
-            "background-color: #1976D2;"
-            "}"
-            "QPushButton:pressed {"
-            "background-color: #0D47A1;"
-            "}"
-        );
-        editBtn->setToolTip("Edit quantity");
-        editBtn->setFixedSize(35, 25);
+        auto* editBtn = createEditButton(this, "Edit quantity");
         connect(editBtn, &QPushButton::clicked, this, [this, itemKey, currentQty = qty]() {
             onEditItem(itemKey, currentQty);
         });
         
-        auto* deleteBtn = new QPushButton("❌", this);
-        deleteBtn->setStyleSheet(
-            "QPushButton {"
-            "background-color: #F44336;"
-            "color: white;"
-            "border: none;"
-            "padding: 4px 8px;"
-            "border-radius: 4px;"
-            "font-size: 14px;"
-            "}"
-            "QPushButton:hover {"
-            "background-color: #D32F2F;"
-            "}"
-            "QPushButton:pressed {"
-            "background-color: #B71C1C;"
-            "}"
-        );
-        deleteBtn->setToolTip("Delete item");
-        deleteBtn->setFixedSize(35, 25);
+        auto* deleteBtn = createDeleteButton(this, "Delete item");
         connect(deleteBtn, &QPushButton::clicked, this, [this, itemKey]() {
             onDeleteItem(itemKey);
         });
