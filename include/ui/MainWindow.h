@@ -10,6 +10,7 @@
 #include <QCompleter>
 #include <QStringListModel>
 #include <QTabWidget>
+#include <string_view>
 #include "include/services/OrderService.h"
 #include "include/services/ProductService.h"
 #include "include/utils/validation_utils.h"
@@ -90,10 +91,11 @@ private slots:
     void onAddProduct();
     void refreshProducts();
     void updateProductStatistics();
-    void onEditProduct(const std::string& productKey, const std::string& productName);
+    void onEditProduct([[maybe_unused]] std::string_view productKey, std::string_view productName);
     void onDeleteProduct(const std::string& productKey, const std::string& productName);
     bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) const;
     void cancelOrderSafely(int orderId);
+    void handleProductEditSave(QLineEdit* nameEdit, QLineEdit* priceEdit, QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog);
 
 public:
     void refreshTable();

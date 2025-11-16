@@ -23,8 +23,7 @@ StatisticsWindow::StatisticsWindow(OrderService& svc, QWidget* parent)
     setWindowTitle("Statistics and Charts");
     
     auto* central = new QWidget(this);
-    auto* root = new QVBoxLayout(central);
-    Q_UNUSED(root); // Layout is managed by Qt's parent-child relationship
+    new QVBoxLayout(central); // Layout is managed by Qt's parent-child relationship
 
     updateStatistics();
     

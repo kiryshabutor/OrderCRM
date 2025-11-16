@@ -40,6 +40,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <string_view>
 
 MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent)
     : QMainWindow(parent), svc_(svc), productSvc_(productSvc) {
@@ -750,14 +751,14 @@ void MainWindow::onDeleteProduct(const std::string& productKey, const std::strin
     }
 }
 
-void MainWindow::onEditProduct(const std::string& productKey, const std::string& productName) {
-    const Product* product = productSvc_.findProduct(productName);
+void MainWindow::onEditProduct([[maybe_unused]] std::string_view productKey, std::string_view productName) {
+    const Product* product = productSvc_.findProduct(std::string(productName));
     if (!product) {
         QMessageBox::warning(this, "error", "product not found");
         return;
     }
     
-    QDialog* editDialog = new QDialog(this);
+    auto* editDialog = new QDialog(this);
     editDialog->setWindowTitle("Edit Product");
     editDialog->setModal(true);
     
@@ -783,55 +784,8 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
     buttons->button(QDialogButtonBox::Ok)->setText("Save");
     layout->addWidget(buttons);
     
-    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, oldName = productName]() {
-        try {
-            std::string newName = formatName(ss(nameEdit->text()));
-            if (newName.empty()) {
-                QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
-                return;
-            }
-            
-            double oldPrice = 0.0;
-            const Product* oldProduct = productSvc_.findProduct(oldName);
-            if (oldProduct) {
-                oldPrice = oldProduct->price;
-            }
-            
-            double price = parsePrice(priceEdit->text());
-            bool ok = false;
-            int stock = stockEdit->text().toInt(&ok);
-            if (!ok || stock < 0) {
-                QMessageBox::warning(editDialog, "error", "Invalid stock value");
-                return;
-            }
-            
-            productSvc_.updateProduct(oldName, newName, price, stock);
-            productSvc_.save();
-            
-            svc_.setPrices(productSvc_.all());
-            bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
-            bool nameChanged = (oldName != newName);
-            
-            if (priceChanged || nameChanged) {
-                if (nameChanged) {
-                    std::string oldKey = oldName;
-                    std::ranges::transform(oldKey, oldKey.begin(), ::tolower);
-                    svc_.recalculateOrdersWithProduct(oldKey);
-                }
-                std::string newKey = newName;
-                std::ranges::transform(newKey, newKey.begin(), ::tolower);
-                svc_.recalculateOrdersWithProduct(newKey);
-            }
-            svc_.save();
-            
-            refreshProducts();
-            refreshTable();
-            
-            editDialog->accept();
-            QMessageBox::information(this, "ok", "product updated");
-        } catch (const CustomException& e) {
-            QMessageBox::warning(editDialog, "error", qs(e.what()));
-        }
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, oldName = std::string(productName)]() {
+        handleProductEditSave(nameEdit, priceEdit, stockEdit, oldName, editDialog);
     });
     
     connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
@@ -839,6 +793,56 @@ void MainWindow::onEditProduct(const std::string& productKey, const std::string&
     editDialog->resize(400, 150);
     editDialog->exec();
     delete editDialog;
+}
+
+void MainWindow::handleProductEditSave(QLineEdit* nameEdit, QLineEdit* priceEdit, QLineEdit* stockEdit, const std::string& oldName, QDialog* editDialog) {
+    try {
+        std::string newName = formatName(ss(nameEdit->text()));
+        if (newName.empty()) {
+            QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
+            return;
+        }
+        
+        double oldPrice = 0.0;
+        const Product* oldProduct = productSvc_.findProduct(oldName);
+        if (oldProduct) {
+            oldPrice = oldProduct->price;
+        }
+        
+        double price = parsePrice(priceEdit->text());
+        bool ok = false;
+        int stock = stockEdit->text().toInt(&ok);
+        if (!ok || stock < 0) {
+            QMessageBox::warning(editDialog, "error", "Invalid stock value");
+            return;
+        }
+        
+        productSvc_.updateProduct(oldName, newName, price, stock);
+        productSvc_.save();
+        
+        svc_.setPrices(productSvc_.all());
+        bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
+        
+        if (bool nameChanged = (oldName != newName); priceChanged || nameChanged) {
+            if (nameChanged) {
+                std::string oldKey = oldName;
+                std::ranges::transform(oldKey, oldKey.begin(), ::tolower);
+                svc_.recalculateOrdersWithProduct(oldKey);
+            }
+            std::string newKey = newName;
+            std::ranges::transform(newKey, newKey.begin(), ::tolower);
+            svc_.recalculateOrdersWithProduct(newKey);
+        }
+        svc_.save();
+        
+        refreshProducts();
+        refreshTable();
+        
+        editDialog->accept();
+        QMessageBox::information(this, "ok", "product updated");
+    } catch (const CustomException& e) {
+        QMessageBox::warning(editDialog, "error", qs(e.what()));
+    }
 }
 
 void MainWindow::updateProductStatistics() {

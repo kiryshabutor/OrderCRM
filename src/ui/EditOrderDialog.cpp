@@ -273,7 +273,7 @@ void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
         Order* o = orderOrWarn();
         if (!o) return;
         
-        QDialog* editDialog = new QDialog(this);
+        auto* editDialog = new QDialog(this);
         editDialog->setWindowTitle("Edit quantity");
         auto* layout = new QVBoxLayout(editDialog);
         

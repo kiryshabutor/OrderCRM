@@ -31,6 +31,66 @@ QString ReportService::escapeCsvField(const QString& field) {
     return result;
 }
 
+static QString escapeCsvField(const QString& field) {
+    QString result = field;
+    result.replace("\"", "\"\"");
+    if (result.contains(',') || result.contains('"') || result.contains('\n')) {
+        result = "\"" + result + "\"";
+    }
+    return result;
+}
+
+static void writeFiltersHeader(QTextStream& out, const ReportFilterInfo& filterInfo) {
+    out << "\n";
+    out << "Filters:\n";
+    out << "Client," << (filterInfo.clientFilter.isEmpty() ? "-" : filterInfo.clientFilter) << "\n";
+    out << "Status," << (filterInfo.statusFilter.isEmpty() ? "-" : filterInfo.statusFilter) << "\n";
+    out << "Total min," << (filterInfo.minTotal.isEmpty() ? "-" : filterInfo.minTotal) << "\n";
+    out << "Total max," << (filterInfo.maxTotal.isEmpty() ? "-" : filterInfo.maxTotal) << "\n";
+    out << "ID min," << (filterInfo.minId.isEmpty() ? "-" : filterInfo.minId) << "\n";
+    out << "ID max," << (filterInfo.maxId.isEmpty() ? "-" : filterInfo.maxId) << "\n";
+    out << "From," << (filterInfo.useFrom ? filterInfo.fromDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+    out << "To," << (filterInfo.useTo ? filterInfo.toDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+}
+
+static QString formatOrderItems(const Order& order, const OrderService& orderService) {
+    QString itemsStr;
+    bool firstItem = true;
+    for (const auto& [key, value] : order.items) {
+        if (!firstItem) itemsStr += "; ";
+        auto pit = orderService.price().find(key);
+        QString priceText = (pit != orderService.price().end())
+            ? QString::number(pit->second, 'f', 2)
+            : QString("n/a");
+        itemsStr += QString("%1 x%2 (@%3)").arg(qs(key)).arg(value).arg(priceText);
+        firstItem = false;
+    }
+    return itemsStr.isEmpty() ? "-" : itemsStr;
+}
+
+static void writeOrderRow(QTextStream& out, const Order& order, const OrderService& orderService) {
+    QString itemsStr = formatOrderItems(order, orderService);
+    QString client = escapeCsvField(qs(order.client));
+    QString status = qs(order.status);
+    QString createdAt = qs(order.createdAt);
+    createdAt.replace("T", " ");
+    QString itemsStrEscaped = escapeCsvField(itemsStr);
+
+    out << order.id << ","
+        << client << ","
+        << status << ","
+        << QString::number(order.total, 'f', 2) << ","
+        << createdAt << ","
+        << itemsStrEscaped << "\n";
+}
+
+static void writeSummarySection(QTextStream& out, int orderCount, double totalSum) {
+    out << "\n";
+    out << "Summary:\n";
+    out << "Total Orders," << orderCount << "\n";
+    out << "Total Revenue," << QString::number(totalSum, 'f', 2) << "\n";
+}
+
 QString ReportService::generateReport(
     const QList<const Order*>& orders,
     const QString& reportName,
@@ -65,16 +125,7 @@ QString ReportService::generateReport(
     out << "Scope: " << (scopeFiltered ? "Current filter" : "All orders") << "\n";
     
     if (includeFiltersHeader) {
-        out << "\n";
-        out << "Filters:\n";
-        out << "Client," << (filterInfo.clientFilter.isEmpty() ? "-" : filterInfo.clientFilter) << "\n";
-        out << "Status," << (filterInfo.statusFilter.isEmpty() ? "-" : filterInfo.statusFilter) << "\n";
-        out << "Total min," << (filterInfo.minTotal.isEmpty() ? "-" : filterInfo.minTotal) << "\n";
-        out << "Total max," << (filterInfo.maxTotal.isEmpty() ? "-" : filterInfo.maxTotal) << "\n";
-        out << "ID min," << (filterInfo.minId.isEmpty() ? "-" : filterInfo.minId) << "\n";
-        out << "ID max," << (filterInfo.maxId.isEmpty() ? "-" : filterInfo.maxId) << "\n";
-        out << "From," << (filterInfo.useFrom ? filterInfo.fromDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
-        out << "To," << (filterInfo.useTo ? filterInfo.toDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+        writeFiltersHeader(out, filterInfo);
     }
     
     out << "\n";
@@ -91,39 +142,11 @@ QString ReportService::generateReport(
         totalSum += o.total;
         statusAgg[qs(o.status)].first += 1;
         statusAgg[qs(o.status)].second += o.total;
-
-        QString itemsStr;
-        bool firstItem = true;
-        for (const auto& [key, value] : o.items) {
-            if (!firstItem) itemsStr += "; ";
-            auto pit = orderService.price().find(key);
-            QString priceText = (pit != orderService.price().end())
-                ? QString::number(pit->second, 'f', 2)
-                : QString("n/a");
-            itemsStr += QString("%1 x%2 (@%3)").arg(qs(key)).arg(value).arg(priceText);
-            firstItem = false;
-        }
-        if (itemsStr.isEmpty()) itemsStr = "-";
-
-        QString client = escapeCsvField(qs(o.client));
-        QString status = qs(o.status);
-        QString createdAt = qs(o.createdAt);
-        createdAt.replace("T", " ");
-        QString itemsStrEscaped = escapeCsvField(itemsStr);
-
-        out << o.id << ","
-            << client << ","
-            << status << ","
-            << QString::number(o.total, 'f', 2) << ","
-            << createdAt << ","
-            << itemsStrEscaped << "\n";
+        writeOrderRow(out, o, orderService);
     }
 
-    out << "\n";
     if (includeSummarySection) {
-        out << "Summary:\n";
-        out << "Total Orders," << orders.size() << "\n";
-        out << "Total Revenue," << QString::number(totalSum, 'f', 2) << "\n";
+        writeSummarySection(out, orders.size(), totalSum);
     }
 
     f.close();
