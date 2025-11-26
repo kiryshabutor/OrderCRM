@@ -122,3 +122,8 @@ coverage/
 # QXlsx build artifacts (if included as submodule)
 QXlsx/build/
 QXlsx/CMakeFiles/
+
+# Project documentation and structure files (not needed in repository)
+code_structure.txt
+new_code_structure.txt
+diagram.puml
