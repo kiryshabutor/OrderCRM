@@ -1,0 +1,3771 @@
+====================
+include/core/IProductRepository.h
+
+#pragma once
+#include <map>
+#include <string>
+#include "include/core/Product.h"
+
+class IProductRepository {
+public:
+    virtual ~IProductRepository() = default;
+    virtual void save(const std::map<std::string, Product>& data) = 0;
+    virtual std::map<std::string, Product> load() = 0;
+};
+
+====================
+include/core/IRepository.h
+
+#pragma once
+#include <vector>
+#include "include/core/Order.h"
+
+class IRepository {
+public:
+    virtual ~IRepository() = default;
+    virtual void save(const std::vector<Order>& data) = 0;
+    virtual std::vector<Order> load() = 0;
+};
+
+====================
+include/core/Order.h
+
+#pragma once
+#include <string>
+#include <map>
+#include <ostream>
+#include <optional>
+
+class Order {
+public:
+    int id;
+    std::string client;
+    std::string status;
+    std::map<std::string, int> items;
+    double total;
+    std::string createdAt;
+
+    double calcTotal(const std::map<std::string, double>& priceList) const;
+
+    bool operator<(const Order& other) const { return id < other.id; }
+    bool operator==(const Order& other) const { return id == other.id; }
+
+    std::string toLine() const;
+    static std::optional<Order> fromLine(const std::string& line);
+
+    friend std::ostream& operator<<(std::ostream& os, const Order& o);
+};
+
+====================
+include/core/Product.h
+
+#pragma once
+#include <string>
+
+class Product {
+public:
+    std::string name;
+    double price;
+    int stock;
+
+    Product() : price(0.0), stock(0) {}
+    Product(const std::string& n, double p, int s = 0) : name(n), price(p), stock(s) {}
+};
+
+
+====================
+include/Errors/CustomExceptions.h
+
+#pragma once
+#include <stdexcept>
+#include <string>
+
+class CustomException : public std::runtime_error { public: using std::runtime_error::runtime_error; };
+class ValidationException : public CustomException { public: using CustomException::CustomException; };
+class NotFoundException : public CustomException { public: using CustomException::CustomException; };
+class IoException : public CustomException { public: using CustomException::CustomException; };
+
+====================
+include/infrastructure/TxtOrderRepository.h
+
+#pragma once
+#include <string>
+#include "include/core/IRepository.h"
+
+class TxtOrderRepository : public IRepository {
+private:
+    std::string file_;
+public:
+    explicit TxtOrderRepository(std::string f) : file_(std::move(f)) {}
+    void save(const std::vector<Order>& data) override;
+    std::vector<Order> load() override;
+};
+
+====================
+include/infrastructure/TxtProductRepository.h
+
+#pragma once
+#include "include/core/IProductRepository.h"
+#include <map>
+#include <string>
+
+class TxtProductRepository : public IProductRepository {
+private:
+    std::string file_;
+public:
+    explicit TxtProductRepository(std::string f) : file_(std::move(f)) {}
+
+    std::map<std::string, Product> load() override;
+    void save(const std::map<std::string, Product>& data) override;
+};
+
+====================
+include/services/OrderService.h
+
+#pragma once
+#include <map>
+#include <string>
+#include <algorithm>
+#include "include/core/Order.h"
+#include "include/core/IRepository.h"
+#include "include/core/Product.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/utils/SimpleList.h"
+
+class ProductService;
+
+class OrderService {
+private:
+    SimpleList<Order> data_;
+    std::map<std::string, double> price_;
+    int nextId_{1};
+    IRepository& repo_;
+    ProductService* productService_{nullptr};
+    void persist();
+    void returnItemsToStock(Order& o);
+    void removeItemsFromStock(Order& o);
+public:
+    explicit OrderService(IRepository& repo) : repo_(repo) {}
+
+    void setProductService(ProductService* ps) { productService_ = ps; }
+    void setPrices(const std::map<std::string, Product>& products);
+    const std::map<std::string,double>& price() const { return price_; }
+
+    Order& create(const std::string& client);
+    void addItem(Order& o, const std::string& name, int qty);
+    void removeItem(Order& o, const std::string& name);
+    void setStatus(Order& o, const std::string& s);
+
+    Order* findById(int id);
+    const Order* findById(int id) const;
+
+    void sortById();
+    double revenue() const;
+    void recalculateOrdersWithProduct(const std::string& productKey);
+
+    void save();
+    void load();
+
+    const SimpleList<Order>& all() const { return data_; }
+    int& nextIdRef() { return nextId_; }
+};
+
+====================
+include/services/ProductService.h
+
+#pragma once
+#include <map>
+#include <string>
+#include "include/core/IProductRepository.h"
+#include "include/core/Product.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/utils/validation_utils.h"
+
+class ProductService {
+private:
+    std::map<std::string, Product> products_;
+    IProductRepository& repo_;
+    ValidationService V_;
+
+public:
+    explicit ProductService(IProductRepository& repo);
+
+    const std::map<std::string, Product>& all() const;
+    Product* findProduct(const std::string& name);
+    const Product* findProduct(const std::string& name) const;
+
+    void load();
+    void save();
+
+    void addProduct(const std::string& name, double price, int stock = 0);
+    void removeProduct(const std::string& name);
+    void updateProduct(const std::string& oldName, const std::string& newName, double newPrice, int stock = -1);
+    
+    void decreaseStock(const std::string& name, int qty);
+    void increaseStock(const std::string& name, int qty);
+    bool hasEnoughStock(const std::string& name, int qty) const;
+    int getStock(const std::string& name) const;
+};
+====================
+include/services/ReportService.h
+
+#pragma once
+#include <QString>
+#include <QList>
+#include <QDateTime>
+#include "include/core/Order.h"
+
+class OrderService;
+
+struct ReportFilterInfo {
+    QString clientFilter;
+    QString statusFilter;
+    QString minTotal;
+    QString maxTotal;
+    QString minId;
+    QString maxId;
+    QDateTime fromDate;
+    QDateTime toDate;
+    bool useFrom;
+    bool useTo;
+};
+
+class ReportService {
+public:
+    static QString generateReport(
+        const QList<const Order*>& orders,
+        const QString& reportName,
+        bool scopeFiltered,
+        bool includeFiltersHeader,
+        bool includeSummarySection,
+        const ReportFilterInfo& filterInfo,
+        const OrderService& orderService
+    );
+    
+private:
+    static QString sanitizedBaseName(const QString& raw);
+    static QString escapeCsvField(const QString& field);
+};
+
+====================
+include/ui/AddOrderDialog.h
+
+#pragma once
+#include <QDialog>
+#include <QLineEdit>
+#include <QDialogButtonBox>
+#include <QCompleter>
+#include "include/services/OrderService.h"
+
+class AddOrderDialog : public QDialog {
+    Q_OBJECT
+private:
+    OrderService& svc_;
+    QLineEdit* clientEdit_;
+    QDialogButtonBox* buttons_;
+    QCompleter* clientCompleter_;
+    int createdId_{-1};
+    
+    void setupCompleter();
+    
+private slots:
+    void onAdd();
+public:
+    explicit AddOrderDialog(OrderService& svc, QWidget* parent = nullptr);
+    int createdOrderId() const { return createdId_; }
+};
+
+====================
+include/ui/AddProductDialog.h
+
+#pragma once
+#include <QDialog>
+#include <QLineEdit>
+#include <QDialogButtonBox>
+#include <string>
+#include "include/services/ProductService.h"
+
+class AddProductDialog : public QDialog {
+    Q_OBJECT
+private:
+    ProductService& productSvc_;
+    QLineEdit* nameEdit_;
+    QLineEdit* priceEdit_;
+    QLineEdit* stockEdit_;
+    QDialogButtonBox* buttons_;
+    std::string addedProductName_;
+    
+private slots:
+    void onAdd();
+    
+public:
+    explicit AddProductDialog(ProductService& productSvc, QWidget* parent = nullptr);
+    std::string addedProductName() const { return addedProductName_; }
+};
+
+
+====================
+include/ui/EditOrderDialog.h
+
+#pragma once
+#include <QDialog>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QPushButton>
+#include <QCompleter>
+#include <QTableWidget>
+#include "include/services/OrderService.h"
+#include "include/services/ProductService.h"
+
+class EditOrderDialog : public QDialog {
+    Q_OBJECT
+private:
+    OrderService& svc_;
+    ProductService* productSvc_;
+    int orderId_;
+    QLineEdit* idEdit_;
+    QComboBox* statusCombo_;
+    QTableWidget* itemsTable_;
+    QLineEdit* addItemName_;
+    QLineEdit* addQty_;
+    QPushButton* addItemBtn_;
+    QCompleter* addItemCompleter_;
+
+    Order* orderOrWarn();
+    void setupCompleters();
+    void refreshItemsTable();
+    void onEditItem(const std::string& itemKey, int currentQty);
+    void onDeleteItem(const std::string& itemKey);
+
+private slots:
+    void onApplyStatus();
+    void onAddItem();
+
+public:
+    explicit EditOrderDialog(OrderService& svc, int orderId, QWidget* parent = nullptr);
+    void setProductService(ProductService* productSvc);
+    signals:
+        void dataChanged();
+};
+
+====================
+include/ui/FilterDialog.h
+
+#pragma once
+#include <QDialog>
+#include <QString>
+#include <QDateTime>
+
+class QLineEdit;
+class QComboBox;
+class QDialogButtonBox;
+class QDateTimeEdit;
+class QCheckBox;
+class QLabel;
+
+class FilterDialog : public QDialog {
+    Q_OBJECT
+private:
+    QLineEdit* clientEdit_;
+    QComboBox* statusCombo_;
+    QLineEdit* minTotalEdit_;
+    QLineEdit* maxTotalEdit_;
+    QLineEdit* minIdEdit_;
+    QLineEdit* maxIdEdit_;
+    QDateTimeEdit* fromDateEdit_;
+    QDateTimeEdit* toDateEdit_;
+    QCheckBox* useFromCheck_;
+    QCheckBox* useToCheck_;
+    QDialogButtonBox* buttons_;
+public:
+    explicit FilterDialog(const QString& currentClient,
+                          const QString& currentStatus,
+                          const QString& minTotal,
+                          const QString& maxTotal,
+                          const QString& minId,
+                          const QString& maxId,
+                          const QDateTime& fromDt,
+                          bool useFrom,
+                          const QDateTime& toDt,
+                          bool useTo,
+                          QWidget* parent = nullptr);
+    QString clientFilter() const;
+    QString statusFilter() const;
+    QString minTotalText() const;
+    QString maxTotalText() const;
+    QString minIdText() const;
+    QString maxIdText() const;
+    bool useFrom() const;
+    bool useTo() const;
+    QDateTime fromDate() const;
+    QDateTime toDate() const;
+};
+
+====================
+include/ui/MainWindow.h
+
+#pragma once
+#include <QMainWindow>
+#include <QTableWidget>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QComboBox>
+#include <QLabel>
+#include <QDateTime>
+#include <QList>
+#include <QCompleter>
+#include <QStringListModel>
+#include <QTabWidget>
+#include "include/services/OrderService.h"
+#include "include/services/ProductService.h"
+#include "include/utils/validation_utils.h"
+
+class StatisticsWindow;
+class QDateTimeEdit;
+class QCheckBox;
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+private:
+    OrderService& svc_;
+    ProductService& productSvc_;
+    ValidationService V_;
+
+    QTabWidget* tabs_;
+    
+    QTableWidget* table_;
+    QPushButton* addOrderBtn_;
+    QPushButton* reportBtn_;
+
+    QPushButton* clearFilterBtn_;
+    QLabel* titleLabel_;
+    
+    QLabel* statsNewLabel_;
+    QLabel* statsInProgressLabel_;
+    QLabel* statsDoneLabel_;
+    QLabel* statsCanceledLabel_;
+    QLabel* statsTotalRevenueLabel_;
+    QPushButton* openChartsBtn_;
+
+    QLineEdit* clientFilterEdit_;
+    QComboBox* statusFilterCombo_;
+    QLineEdit* minTotalEdit_;
+    QLineEdit* maxTotalEdit_;
+    QLineEdit* minIdEdit_;
+    QLineEdit* maxIdEdit_;
+    QCheckBox* useFromCheck_;
+    QDateTimeEdit* fromDateEdit_;
+    QCheckBox* useToCheck_;
+    QDateTimeEdit* toDateEdit_;
+
+    QTableWidget* productTable_;
+    QPushButton* addProductBtn_;
+    QLabel* productStatsLowStockLabel_;
+    QLabel* productStatsHighStockLabel_;
+    QLabel* productStatsExpensiveLabel_;
+    QLabel* productStatsCheapLabel_;
+    QLabel* productStatsTotalCountLabel_;
+    QLabel* productStatsTotalValueLabel_;
+
+    StatisticsWindow* statisticsWindow_;
+    QCompleter* clientFilterCompleter_;
+    QStringListModel* clientFilterModel_;
+
+    QString activeClientFilter_;
+    QString activeStatusFilter_;
+    QString minTotalText_;
+    QString maxTotalText_;
+    QString minIdText_;
+    QString maxIdText_;
+    QDateTime fromDate_;
+    QDateTime toDate_;
+    bool useFrom_{false};
+    bool useTo_{false};
+
+    QList<const Order*> currentFilteredRows() const;
+    void applyFilters();
+    void setupCompleters();
+
+private slots:
+    void onAddOrder();
+    void onOpenReportDialog();
+    void onOpenStatistics();
+    void onClearFilter();
+    void onFilterChanged();
+    void updateStatistics();
+    void onAddProduct();
+    void refreshProducts();
+    void updateProductStatistics();
+    void onEditProduct(const std::string& productKey, const std::string& productName);
+    void onDeleteProduct(const std::string& productKey, const std::string& productName);
+    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds);
+
+public:
+    void refreshTable();
+    explicit MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
+};
+
+====================
+include/ui/NumericItem.h
+
+#pragma once
+#include <QTableWidgetItem>
+
+class NumericItem : public QTableWidgetItem {
+    double v_;
+public:
+    explicit NumericItem(int v, const QString& display)
+        : QTableWidgetItem(display), v_(static_cast<double>(v)) {}
+    explicit NumericItem(double v, const QString& display)
+        : QTableWidgetItem(display), v_(v) {}
+    bool operator<(const QTableWidgetItem& other) const override {
+        const auto* o = dynamic_cast<const NumericItem*>(&other);
+        if (o) return v_ < o->v_;
+        return QTableWidgetItem::operator<(other);
+    }
+};
+
+====================
+include/ui/ProductWindow.h
+
+#pragma once
+#include <QMainWindow>
+#include <QTableWidget>
+#include <QPushButton>
+#include <QCompleter>
+#include "include/services/ProductService.h"
+#include "include/services/OrderService.h"
+
+class ProductWindow : public QMainWindow {
+    Q_OBJECT
+private:
+    ProductService& productSvc_;
+    OrderService& orderSvc_;
+
+    QTableWidget* productTable_;
+    QPushButton* addProductBtn_;
+    QCompleter* productNameCompleter_;
+
+    void refreshProducts();
+    void setupCompleters();
+    void onEditProduct(const std::string& productKey, const std::string& productName);
+    void onDeleteProduct(const std::string& productKey, const std::string& productName);
+    bool isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds);
+
+private slots:
+    void onAddProduct();
+
+signals:
+    void ordersChanged();
+
+public:
+    explicit ProductWindow(ProductService& productSvc, OrderService& orderSvc, QWidget* parent = nullptr);
+
+protected:
+    void showEvent(QShowEvent* event) override;
+};
+
+====================
+include/ui/ReportDialog.h
+
+#pragma once
+#include <QDialog>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QDialogButtonBox>
+
+class ReportDialog : public QDialog {
+    Q_OBJECT
+private:
+    QLineEdit* nameEdit_;
+    QComboBox* scopeCombo_;
+    QCheckBox* includeFilters_;
+    QCheckBox* includeSummary_;
+public:
+    explicit ReportDialog(bool filterActive, QWidget* parent = nullptr);
+    QString reportName() const;
+    bool scopeFiltered() const;
+    bool includeFiltersHeader() const;
+    bool includeSummarySection() const;
+};
+
+====================
+include/ui/StatisticsWindow.h
+
+#pragma once
+#include <QMainWindow>
+#include <QWidget>
+#include "include/services/OrderService.h"
+
+class QLabel;
+class QPushButton;
+class QVBoxLayout;
+class QTimer;
+
+class StatisticsWindow : public QMainWindow {
+    Q_OBJECT
+private:
+    OrderService& svc_;
+    QTimer* animationTimer_;
+    double animationProgress_;
+
+    void updateStatistics();
+
+public:
+    explicit StatisticsWindow(OrderService& svc, QWidget* parent = nullptr);
+    void refreshStatistics();
+
+protected:
+    void showEvent(QShowEvent* event) override;
+    void paintEvent(QPaintEvent* event) override;
+
+private slots:
+    void onAnimationTick();
+
+private:
+    class StatusStats {
+    public:
+        int newCount = 0;
+        int inProgressCount = 0;
+        int doneCount = 0;
+        int canceledCount = 0;
+        double newRevenue = 0.0;
+        double inProgressRevenue = 0.0;
+        double doneRevenue = 0.0;
+        double canceledRevenue = 0.0;
+    };
+    StatusStats stats_;
+    
+    void drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow = true);
+};
+
+====================
+include/ui/UtilsQt.h
+
+#pragma once
+#include <QString>
+#include <string>
+#include <algorithm>
+#include <cctype>
+
+inline QString qs(const std::string& s) { return QString::fromUtf8(s.c_str()); }
+inline std::string ss(const QString& s) { return s.toUtf8().constData(); }
+
+inline std::string formatName(const std::string& name) {
+    if (name.empty()) return name;
+    std::string result = name;
+    std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    if (!result.empty()) {
+        result[0] = std::toupper(result[0]);
+    }
+    return result;
+}
+
+====================
+include/utils/SimpleList.h
+
+#pragma once
+#include <stdexcept>
+#include <type_traits>
+
+template<typename T>
+class SimpleList {
+private:
+    T* data_;
+    size_t size_;
+    size_t capacity_;
+
+    void ensure_capacity(size_t newCap) {
+        if (newCap <= capacity_) return;
+        T* newData = new T[newCap];
+        for (size_t i = 0; i < size_; ++i)
+            newData[i] = data_[i];
+        delete[] data_;
+        data_ = newData;
+        capacity_ = newCap;
+    }
+
+public:
+    using value_type = T;
+
+    SimpleList() : data_(nullptr), size_(0), capacity_(0) {}
+    ~SimpleList() { delete[] data_; }
+
+    void push_back(const T& value) {
+        if (size_ == capacity_)
+            ensure_capacity(capacity_ == 0 ? 2 : capacity_ * 2);
+        data_[size_++] = value;
+    }
+
+    size_t size() const { return size_; }
+
+    T& operator[](size_t idx) {
+        if (idx >= size_) throw std::out_of_range("SimpleList index out of range");
+        return data_[idx];
+    }
+
+    const T& operator[](size_t idx) const {
+        if (idx >= size_) throw std::out_of_range("SimpleList index out of range");
+        return data_[idx];
+    }
+
+    T* begin() { return data_; }
+    T* end() { return data_ + size_; }
+    const T* begin() const { return data_; }
+    const T* end() const { return data_ + size_; }
+
+    void clear() { size_ = 0; }
+};
+
+template<typename Container, typename Predicate>
+auto* find_if(Container& c, Predicate pred) {
+    using Elem = typename std::remove_reference_t<decltype(*c.begin())>;
+    for (auto& x : c)
+        if (pred(x)) return &x;
+    return static_cast<Elem*>(nullptr);
+}
+
+====================
+include/utils/validation_utils.h
+
+#pragma once
+#include <regex>
+#include <string>
+#include <cmath>
+#include "include/Errors/CustomExceptions.h"
+
+class ValidationService {
+private:
+    std::regex re;
+    static inline bool money_precision_ok(double v) {
+        double cents = std::round(v * 100.0);
+        return std::fabs(v * 100.0 - cents) < 1e-9;
+    }
+public:
+    void validate_client_name(const std::string& name) {
+        re = std::regex(R"(^[A-Za-zА-Яа-яЁё0-9]+(?:[ .-][A-Za-zА-Яа-яЁё0-9]+)*$)");
+        if (!std::regex_match(name, re)) throw ValidationException("invalid client name");
+    }
+    void validate_item_name(const std::string& name) {
+        re = std::regex(R"(^[^\s|:;][^|:;]*$)");
+        if (!std::regex_match(name, re)) throw ValidationException("invalid item name");
+    }
+    void validate_qty(int qty) const {
+        if (qty <= 0) throw ValidationException("qty must be positive");
+    }
+    void validate_status(const std::string& s) {
+        if (s != "new" && s != "in_progress" && s != "done" && s != "canceled")
+            throw ValidationException("invalid status");
+    }
+    void validate_id(int id) const {
+        if (id <= 0) throw ValidationException("id must be positive");
+    }
+    void validate_price(double price) const {
+        if (!(price > 0.0)) throw ValidationException("price must be positive");
+        if (!money_precision_ok(price)) throw ValidationException("price must have max 2 decimals");
+    }
+    double normalize_money(double v) const {
+        if (!(v >= 0.0)) throw ValidationException("money must be non-negative");
+        double r = std::round(v * 100.0) / 100.0;
+        return r;
+    }
+};
+
+====================
+src/core/Order.cpp
+
+#include "include/core/Order.h"
+#include <sstream>
+#include <chrono>
+#include <iomanip>
+#include <ctime>
+#include <algorithm>
+#include <cmath>
+
+static std::string now_iso8601() {
+    auto tp = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(tp);
+    std::tm lt{};
+#if defined(_WIN32)
+    localtime_s(&lt, &t);
+#else
+    localtime_r(&t, &lt);
+#endif
+    std::ostringstream os;
+    os << std::put_time(&lt, "%Y-%m-%dT%H:%M:%S");
+    return os.str();
+}
+
+double Order::calcTotal(const std::map<std::string, double>& priceList) const {
+    double s = 0.0;
+    for (auto& kv : items) {
+        auto it = priceList.find(kv.first);
+        if (it != priceList.end())
+            s += it->second * kv.second;
+    }
+    return std::round(s * 100.0) / 100.0;
+}
+
+std::string Order::toLine() const {
+    std::ostringstream os;
+    os.setf(std::ios::fixed);
+    os << std::setprecision(2);
+    os << id << ';' << client << ';' << status << ';' << total << ';' << createdAt << ';';
+    bool first = true;
+    for (auto& kv : items) {
+        if (!first) os << ',';
+        os << kv.first << ':' << kv.second;
+        first = false;
+    }
+    return os.str();
+}
+
+std::optional<Order> Order::fromLine(const std::string& line) {
+    std::istringstream ss(line);
+    Order o;
+    std::string idStr, clientStr, statusStr, totalStr, createdStr, itemsStr;
+
+    if (!std::getline(ss, idStr, ';')) return std::nullopt;
+    if (!std::getline(ss, clientStr, ';')) return std::nullopt;
+    if (!std::getline(ss, statusStr, ';')) return std::nullopt;
+    if (!std::getline(ss, totalStr, ';')) return std::nullopt;
+
+    std::string rest;
+    std::getline(ss, rest);
+    std::istringstream restStream(rest);
+    if (std::getline(restStream, createdStr, ';')) {
+        std::getline(restStream, itemsStr);
+    } else {
+        createdStr.clear();
+        itemsStr = rest;
+    }
+
+    o.id = std::stoi(idStr);
+    o.client = clientStr;
+    o.status = statusStr;
+    {
+        std::string t = totalStr;
+        std::replace(t.begin(), t.end(), ',', '.');
+        double v = std::stod(t);
+        o.total = std::round(v * 100.0) / 100.0;
+    }
+    o.createdAt = createdStr.empty() ? now_iso8601() : createdStr;
+
+    std::istringstream itemStream(itemsStr);
+    std::string pair;
+    while (std::getline(itemStream, pair, ',')) {
+        size_t pos = pair.find(':');
+        if (pos != std::string::npos) {
+            std::string name = pair.substr(0, pos);
+            int qty = std::stoi(pair.substr(pos + 1));
+            o.items[name] = qty;
+        }
+    }
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& os, const Order& o) {
+    os << "Order #" << o.id << " (" << o.client << ") [" << o.status << "]\n";
+    for (auto& kv : o.items)
+        os << "  " << kv.first << " x" << kv.second << "\n";
+    os.setf(std::ios::fixed);
+    os << std::setprecision(2);
+    os << "Total: " << o.total << "\n";
+    os << "CreatedAt: " << o.createdAt << "\n";
+    return os;
+}
+
+====================
+src/infrastructure/TxtOrderRepository.cpp
+
+#include "include/infrastructure/TxtOrderRepository.h"
+#include <fstream>
+#include <iomanip>
+#include "include/Errors/CustomExceptions.h"
+
+void TxtOrderRepository::save(const std::vector<Order>& data) {
+    std::ofstream o(file_);
+    if (!o) throw IoException("cannot open file for write: " + file_);
+    o.setf(std::ios::fixed);
+    o << std::setprecision(2);
+    for (const auto& e : data) o << e.toLine() << '\n';
+}
+
+std::vector<Order> TxtOrderRepository::load() {
+    std::vector<Order> v;
+    std::ifstream i(file_);
+    if (!i) return v;
+    std::string L;
+    while (std::getline(i, L)) {
+        if (auto oo = Order::fromLine(L)) v.push_back(*oo);
+    }
+    return v;
+}
+
+====================
+src/infrastructure/TxtProductRepository.cpp
+
+#include "include/infrastructure/TxtProductRepository.h"
+#include "include/core/Product.h"
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+#include <cctype>
+#include <locale>
+#include <iomanip>
+#include <cmath>
+#include "include/Errors/CustomExceptions.h"
+
+static inline void trim(std::string& s) {
+    while (!s.empty() && std::isspace((unsigned char)s.front())) s.erase(s.begin());
+    while (!s.empty() && std::isspace((unsigned char)s.back()))  s.pop_back();
+}
+
+static inline std::string toLower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(),
+                   [](unsigned char c){ return std::tolower(c); });
+    return s;
+}
+
+static inline double parse_price(std::string s) {
+    trim(s);
+    std::replace(s.begin(), s.end(), ',', '.');
+    s.erase(std::remove_if(s.begin(), s.end(),
+                           [](unsigned char c){ return std::isspace(c); }),
+            s.end());
+    std::stringstream ss(s);
+    ss.imbue(std::locale::classic());
+    double v = 0.0;
+    ss >> v;
+    v = std::round(v * 100.0) / 100.0;
+    return v;
+}
+
+static inline int parse_int(std::string s) {
+    trim(s);
+    s.erase(std::remove_if(s.begin(), s.end(),
+                           [](unsigned char c){ return std::isspace(c); }),
+            s.end());
+    if (s.empty()) return 0;
+    return std::stoi(s);
+}
+
+std::map<std::string, Product> TxtProductRepository::load() {
+    std::map<std::string, Product> result;
+    std::ifstream in(file_);
+    if (!in) {
+        return result;
+    }
+
+    std::string line;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        std::string name, priceStr, stockStr;
+        std::stringstream ss(line);
+        std::getline(ss, name, ';');
+        std::getline(ss, priceStr, ';');
+        std::getline(ss, stockStr, ';');
+        trim(name);
+        if (name.empty()) continue;
+        std::string key = toLower(name);
+        double price = parse_price(priceStr);
+        int stock = stockStr.empty() ? 0 : parse_int(stockStr);
+        result[key] = Product(name, price, stock);
+    }
+    return result;
+}
+
+void TxtProductRepository::save(const std::map<std::string, Product>& data) {
+    std::ofstream out(file_);
+    if (!out) throw IoException("cannot open products file for write: " + file_);
+    out.setf(std::ios::fixed);
+    out << std::setprecision(2);
+    for (auto& kv : data) {
+        const Product& p = kv.second;
+        out << p.name << ";" << p.price << ";" << p.stock << "\n";
+    }
+}
+
+====================
+src/main.cpp
+
+#include <QApplication>
+#include <QCoreApplication>
+#include "include/infrastructure/TxtOrderRepository.h"
+#include "include/infrastructure/TxtProductRepository.h"
+#include "include/services/OrderService.h"
+#include "include/services/ProductService.h"
+#include "include/ui/MainWindow.h"
+#include <filesystem>
+#include <fstream>
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    std::filesystem::path appDir = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString());
+
+    std::filesystem::path dbDir       = appDir / "db";
+    std::filesystem::path ordersPath  = dbDir / "orders.txt";
+    std::filesystem::path productsPath= dbDir / "products.txt";
+    std::filesystem::path reportsDir  = appDir / "reports";
+
+    std::error_code ec;
+    std::filesystem::create_directories(dbDir, ec);
+    std::filesystem::create_directories(reportsDir, ec);
+
+    if (!std::filesystem::exists(ordersPath))   { std::ofstream(ordersPath.string()).close(); }
+    if (!std::filesystem::exists(productsPath)) { std::ofstream(productsPath.string()).close(); }
+
+    TxtOrderRepository orderRepo(ordersPath.string());
+    TxtProductRepository productRepo(productsPath.string());
+
+    ProductService productSvc(productRepo);
+    try { productSvc.load(); } catch (...) {}
+
+    OrderService orderSvc(orderRepo);
+    orderSvc.setProductService(&productSvc);
+    orderSvc.setPrices(productSvc.all());
+    try { orderSvc.load(); } catch (...) {}
+
+    MainWindow w(orderSvc, productSvc);
+    w.show();
+
+    return app.exec();
+}
+
+====================
+src/services/OrderService.cpp
+
+#include "include/services/OrderService.h"
+#include "include/services/ProductService.h"
+#include "include/utils/validation_utils.h"
+#include <algorithm>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <ctime>
+#include <cmath>
+
+static std::string now_iso8601_srv() {
+    auto tp = std::chrono::system_clock::now();
+    std::time_t t = std::chrono::system_clock::to_time_t(tp);
+    std::tm lt{};
+#if defined(_WIN32)
+    localtime_s(&lt, &t);
+#else
+    localtime_r(&t, &lt);
+#endif
+    std::ostringstream os;
+    os << std::put_time(&lt, "%Y-%m-%dT%H:%M:%S");
+    return os.str();
+}
+
+void OrderService::persist() {
+    save();
+}
+
+Order& OrderService::create(const std::string& client) {
+    ValidationService V;
+    V.validate_client_name(client);
+    Order o;
+    o.id = nextId_++;
+    o.client = client;
+    o.status = "new";
+    o.total = 0;
+    o.createdAt = now_iso8601_srv();
+    data_.push_back(o);
+    persist();
+    return data_[data_.size() - 1];
+}
+
+void OrderService::setPrices(const std::map<std::string, Product>& products) {
+    price_.clear();
+    for (const auto& kv : products) {
+        price_[kv.first] = kv.second.price;
+    }
+}
+
+void OrderService::addItem(Order& o, const std::string& item, int qty) {
+    if (qty <= 0) throw ValidationException("qty must be positive");
+    std::string key = item;
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+    auto it = price_.find(key);
+    if (it == price_.end()) throw NotFoundException("item not found in product base");
+    
+    if (o.status != "canceled") {
+        if (!productService_) {
+            throw ValidationException("product service not initialized");
+        }
+        
+        int availableStock = productService_->getStock(key);
+        if (availableStock < qty) {
+            throw ValidationException("not enough stock. Available: " + std::to_string(availableStock) + 
+                                      ", needed: " + std::to_string(qty));
+        }
+        
+        try {
+            productService_->decreaseStock(key, qty);
+            productService_->save();
+        } catch (const ValidationException& e) {
+            throw;
+        } catch (const NotFoundException& e) {
+            throw ValidationException("product not found: " + key);
+        }
+    }
+    
+    o.items[key] += qty;
+    o.total = o.calcTotal(price_);
+    o.total = std::round(o.total * 100.0) / 100.0;
+    persist();
+}
+
+void OrderService::removeItem(Order& o, const std::string& name) {
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), [](unsigned char c){ return std::tolower(c); });
+    auto it = o.items.find(key);
+    if (it == o.items.end()) throw NotFoundException("item not found in this order");
+    
+    int qty = it->second;
+    o.items.erase(it);
+    
+    if (o.status != "canceled" && productService_) {
+        productService_->increaseStock(key, qty);
+        productService_->save();
+    }
+    
+    o.total = o.calcTotal(price_);
+    o.total = std::round(o.total * 100.0) / 100.0;
+    persist();
+}
+
+void OrderService::returnItemsToStock(Order& o) {
+    if (!productService_) return;
+    for (const auto& kv : o.items) {
+        productService_->increaseStock(kv.first, kv.second);
+    }
+    productService_->save();
+}
+
+void OrderService::removeItemsFromStock(Order& o) {
+    if (!productService_) return;
+    for (const auto& kv : o.items) {
+        if (!productService_->hasEnoughStock(kv.first, kv.second)) {
+            int available = productService_->getStock(kv.first);
+            throw ValidationException("not enough stock for " + kv.first + 
+                                      ". Available: " + std::to_string(available) + 
+                                      ", needed: " + std::to_string(kv.second));
+        }
+        productService_->decreaseStock(kv.first, kv.second);
+    }
+    productService_->save();
+}
+
+void OrderService::setStatus(Order& o, const std::string& s) {
+    ValidationService V;
+    V.validate_status(s);
+    
+    std::string oldStatus = o.status;
+    o.status = s;
+    
+    if (productService_) {
+        if (oldStatus == "canceled" && s != "canceled") {
+            try {
+                removeItemsFromStock(o);
+            } catch (const ValidationException& e) {
+                o.status = oldStatus;
+                throw;
+            }
+        } else if (oldStatus != "canceled" && s == "canceled") {
+            returnItemsToStock(o);
+        }
+    }
+    
+    persist();
+}
+
+Order* OrderService::findById(int id) {
+    return find_if(data_, [id](Order& o) { return o.id == id; });
+}
+
+const Order* OrderService::findById(int id) const {
+    return find_if(data_, [id](const Order& o) { return o.id == id; });
+}
+
+void OrderService::sortById() {
+    std::sort(data_.begin(), data_.end(), [](const Order& a, const Order& b) {
+        return a.id < b.id;
+    });
+}
+
+double OrderService::revenue() const {
+    double s = 0;
+    for (auto& o : data_) s += o.total;
+    return std::round(s * 100.0) / 100.0;
+}
+
+void OrderService::recalculateOrdersWithProduct(const std::string& productKey) {
+    std::string key = productKey;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    
+    bool changed = false;
+    for (auto& order : data_) {
+        if (order.items.find(key) != order.items.end()) {
+            double oldTotal = order.total;
+            order.total = order.calcTotal(price_);
+            order.total = std::round(order.total * 100.0) / 100.0;
+            if (std::abs(oldTotal - order.total) > 0.01) {
+                changed = true;
+            }
+        }
+    }
+    
+    if (changed) {
+        persist();
+    }
+}
+
+void OrderService::save() {
+    std::vector<Order> temp;
+    for (auto& o : data_) {
+        Order c = o;
+        c.total = c.calcTotal(price_);
+        c.total = std::round(c.total * 100.0) / 100.0;
+        temp.push_back(c);
+    }
+    repo_.save(temp);
+}
+
+void OrderService::load() {
+    auto loaded = repo_.load();
+    data_.clear();
+    for (auto& o : loaded) {
+        Order c = o;
+        c.total = c.calcTotal(price_);
+        c.total = std::round(c.total * 100.0) / 100.0;
+        
+        data_.push_back(c);
+        nextId_ = std::max(nextId_, c.id + 1);
+    }
+}
+
+====================
+src/services/ProductService.cpp
+
+#include "include/services/ProductService.h"
+#include <algorithm>
+#include <cmath>
+
+ProductService::ProductService(IProductRepository& repo) : repo_(repo) {}
+
+const std::map<std::string, Product>& ProductService::all() const {
+    return products_;
+}
+
+Product* ProductService::findProduct(const std::string& name) {
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    auto it = products_.find(key);
+    return it != products_.end() ? &it->second : nullptr;
+}
+
+const Product* ProductService::findProduct(const std::string& name) const {
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    auto it = products_.find(key);
+    return it != products_.end() ? &it->second : nullptr;
+}
+
+void ProductService::load() {
+    products_ = repo_.load();
+    std::map<std::string, Product> normalized;
+    for (auto& kv : products_) {
+        Product p = kv.second;
+        p.price = std::round(p.price * 100.0) / 100.0;
+        if (p.price > 0.0) {
+            if (p.stock < 0) p.stock = 0;
+            normalized[kv.first] = p;
+        }
+    }
+    products_.swap(normalized);
+}
+
+void ProductService::save() {
+    repo_.save(products_);
+}
+
+void ProductService::addProduct(const std::string& name, double price, int stock) {
+    V_.validate_item_name(name);
+    V_.validate_price(price);
+    if (stock < 0) throw ValidationException("stock cannot be negative");
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    if (products_.contains(key))
+        throw ValidationException("product already exists");
+    double v = V_.normalize_money(price);
+    if (v <= 0.0) throw ValidationException("price must be positive");
+    products_[key] = Product(name, v, stock);
+}
+
+void ProductService::removeProduct(const std::string& name) {
+    std::string key = name;
+    std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+    auto it = products_.find(key);
+    if (it == products_.end())
+        throw NotFoundException("product not found");
+    products_.erase(it);
+}
+
+void ProductService::updateProduct(const std::string& oldName, const std::string& newName, double newPrice, int stock) {
+    std::string oldKey = oldName, newKey = newName;
+    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+    std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+    auto it = products_.find(oldKey);
+    if (it == products_.end())
+        throw NotFoundException("product not found");
+    V_.validate_item_name(newName);
+    V_.validate_price(newPrice);
+    double v = V_.normalize_money(newPrice);
+    Product p = it->second;
+    p.name = newName;
+    p.price = v;
+    if (stock >= 0) p.stock = stock;
+    products_.erase(it);
+    products_[newKey] = p;
+}
+
+void ProductService::decreaseStock(const std::string& name, int qty) {
+    Product* p = findProduct(name);
+    if (!p) throw NotFoundException("product not found");
+    if (p->stock < qty) throw ValidationException("not enough stock");
+    p->stock -= qty;
+}
+
+void ProductService::increaseStock(const std::string& name, int qty) {
+    Product* p = findProduct(name);
+    if (!p) throw NotFoundException("product not found");
+    p->stock += qty;
+}
+
+bool ProductService::hasEnoughStock(const std::string& name, int qty) const {
+    const Product* p = findProduct(name);
+    if (!p) return false;
+    return p->stock >= qty;
+}
+
+int ProductService::getStock(const std::string& name) const {
+    const Product* p = findProduct(name);
+    if (!p) return 0;
+    return p->stock;
+}
+
+====================
+src/services/ReportService.cpp
+
+#include "include/services/ReportService.h"
+#include "include/services/OrderService.h"
+#include "include/ui/UtilsQt.h"
+#include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QCoreApplication>
+#include <QDateTime>
+#include <QStringConverter>
+#include <QMap>
+
+QString ReportService::sanitizedBaseName(const QString& raw) {
+    QString base = raw.trimmed();
+    if (base.isEmpty()) base = "Report";
+    QString res;
+    for (QChar ch : base) {
+        if (ch.isLetterOrNumber() || ch == ' ' || ch == '_' || ch == '-' ) res.append(ch);
+        else res.append('_');
+    }
+    res = res.simplified();
+    res.replace(' ', '_');
+    return res;
+}
+
+QString ReportService::escapeCsvField(const QString& field) {
+    QString result = field;
+    result.replace("\"", "\"\"");
+    if (result.contains(',') || result.contains('"') || result.contains('\n')) {
+        result = "\"" + result + "\"";
+    }
+    return result;
+}
+
+QString ReportService::generateReport(
+    const QList<const Order*>& orders,
+    const QString& reportName,
+    bool scopeFiltered,
+    bool includeFiltersHeader,
+    bool includeSummarySection,
+    const ReportFilterInfo& filterInfo,
+    const OrderService& orderService
+) {
+    if (orders.isEmpty()) {
+        return QString();
+    }
+
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QDir reportsDir(baseDir + "/reports");
+    reportsDir.mkpath(".");
+    QString base = sanitizedBaseName(reportName);
+    QString ts = QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss");
+    QString fileName = reportsDir.filePath(QString("%1_%2.csv").arg(base, ts));
+    
+    QFile f(fileName);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return QString();
+    }
+    
+    QTextStream out(&f);
+    out.setEncoding(QStringConverter::Encoding::Utf8);
+    out.setRealNumberNotation(QTextStream::FixedNotation);
+    out.setRealNumberPrecision(2);
+
+    out << "Order Report: " << base << " [" << ts << "]\n";
+    out << "Scope: " << (scopeFiltered ? "Current filter" : "All orders") << "\n";
+    
+    if (includeFiltersHeader) {
+        out << "\n";
+        out << "Filters:\n";
+        out << "Client," << (filterInfo.clientFilter.isEmpty() ? "-" : filterInfo.clientFilter) << "\n";
+        out << "Status," << (filterInfo.statusFilter.isEmpty() ? "-" : filterInfo.statusFilter) << "\n";
+        out << "Total min," << (filterInfo.minTotal.isEmpty() ? "-" : filterInfo.minTotal) << "\n";
+        out << "Total max," << (filterInfo.maxTotal.isEmpty() ? "-" : filterInfo.maxTotal) << "\n";
+        out << "ID min," << (filterInfo.minId.isEmpty() ? "-" : filterInfo.minId) << "\n";
+        out << "ID max," << (filterInfo.maxId.isEmpty() ? "-" : filterInfo.maxId) << "\n";
+        out << "From," << (filterInfo.useFrom ? filterInfo.fromDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+        out << "To," << (filterInfo.useTo ? filterInfo.toDate.toString("yyyy-MM-dd HH:mm:ss") : "-") << "\n";
+    }
+    
+    out << "\n";
+    out << "Orders: " << orders.size() << "\n";
+    out << "\n";
+
+    out << "Order ID,Client,Status,Total,Created At,Items\n";
+
+    double totalSum = 0.0;
+    QMap<QString, QPair<int,double>> statusAgg;
+
+    for (const Order* op : orders) {
+        const Order& o = *op;
+        totalSum += o.total;
+        statusAgg[qs(o.status)].first += 1;
+        statusAgg[qs(o.status)].second += o.total;
+
+        QString itemsStr;
+        bool firstItem = true;
+        for (auto& kv : o.items) {
+            if (!firstItem) itemsStr += "; ";
+            auto pit = orderService.price().find(kv.first);
+            QString priceText = (pit != orderService.price().end())
+                ? QString::number(pit->second, 'f', 2)
+                : QString("n/a");
+            itemsStr += QString("%1 x%2 (@%3)").arg(qs(kv.first)).arg(kv.second).arg(priceText);
+            firstItem = false;
+        }
+        if (itemsStr.isEmpty()) itemsStr = "-";
+
+        QString client = escapeCsvField(qs(o.client));
+        QString status = qs(o.status);
+        QString createdAt = qs(o.createdAt);
+        createdAt.replace("T", " ");
+        QString itemsStrEscaped = escapeCsvField(itemsStr);
+
+        out << o.id << ","
+            << client << ","
+            << status << ","
+            << QString::number(o.total, 'f', 2) << ","
+            << createdAt << ","
+            << itemsStrEscaped << "\n";
+    }
+
+    out << "\n";
+    if (includeSummarySection) {
+        out << "Summary:\n";
+        out << "Total Orders," << orders.size() << "\n";
+        out << "Total Revenue," << QString::number(totalSum, 'f', 2) << "\n";
+    }
+
+    f.close();
+    return fileName;
+}
+
+====================
+src/ui/AddOrderDialog.cpp
+
+#include "include/ui/AddOrderDialog.h"
+#include "include/ui/UtilsQt.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/utils/validation_utils.h"
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QMessageBox>
+#include <QPushButton>
+#include <QSet>
+
+AddOrderDialog::AddOrderDialog(OrderService& svc, QWidget* parent)
+    : QDialog(parent), svc_(svc), clientCompleter_(nullptr) {
+    setWindowTitle("Add order");
+    auto* root = new QVBoxLayout(this);
+    auto* form = new QFormLayout();
+    clientEdit_ = new QLineEdit(this);
+    clientEdit_->setPlaceholderText("client name");
+    form->addRow("Client name:", clientEdit_);
+    root->addLayout(form);
+    buttons_ = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons_->button(QDialogButtonBox::Ok)->setText("Add");
+    root->addWidget(buttons_);
+    connect(buttons_, &QDialogButtonBox::accepted, this, &AddOrderDialog::onAdd);
+    connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    setupCompleter();
+    resize(360, 120);
+}
+
+void AddOrderDialog::setupCompleter() {
+    QSet<QString> clientSet;
+    const auto& orders = svc_.all();
+    for (const auto& order : orders) {
+        clientSet.insert(qs(order.client));
+    }
+    
+    QStringList clientNames = clientSet.values();
+    clientNames.sort(Qt::CaseInsensitive);
+    
+    if (clientCompleter_) {
+        delete clientCompleter_;
+    }
+    clientCompleter_ = new QCompleter(clientNames, this);
+    clientCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    clientCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    clientCompleter_->setFilterMode(Qt::MatchContains);
+    clientEdit_->setCompleter(clientCompleter_);
+}
+
+void AddOrderDialog::onAdd() {
+    try {
+        std::string client = formatName(ss(clientEdit_->text()));
+        ValidationService V;
+        V.validate_client_name(client);
+        Order& o = svc_.create(client);
+        createdId_ = o.id;
+        accept();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+====================
+src/ui/AddProductDialog.cpp
+
+#include "include/ui/AddProductDialog.h"
+#include "include/ui/UtilsQt.h"
+#include "include/Errors/CustomExceptions.h"
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QMessageBox>
+#include <QIntValidator>
+#include <QPushButton>
+#include <cmath>
+
+static double parsePrice(const QString& input) {
+    QString s = input.trimmed();
+    if (s.isEmpty()) throw ValidationException("price cannot be empty");
+    s.replace(',', '.');
+    bool ok = false;
+    double price = s.toDouble(&ok);
+    if (!ok || price <= 0.0) throw ValidationException("invalid price");
+    double cents = std::round(price * 100.0);
+    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
+    price = cents / 100.0;
+    return price;
+}
+
+AddProductDialog::AddProductDialog(ProductService& productSvc, QWidget* parent)
+    : QDialog(parent), productSvc_(productSvc) {
+    setWindowTitle("Add product");
+    auto* root = new QVBoxLayout(this);
+    auto* form = new QFormLayout();
+    
+    nameEdit_ = new QLineEdit(this);
+    nameEdit_->setPlaceholderText("product name");
+    form->addRow("Product name:", nameEdit_);
+    
+    priceEdit_ = new QLineEdit(this);
+    priceEdit_->setPlaceholderText("price");
+    form->addRow("Price:", priceEdit_);
+    
+    stockEdit_ = new QLineEdit(this);
+    stockEdit_->setPlaceholderText("stock");
+    stockEdit_->setValidator(new QIntValidator(0, 1000000000, this));
+    form->addRow("Stock:", stockEdit_);
+    
+    root->addLayout(form);
+    buttons_ = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    buttons_->button(QDialogButtonBox::Ok)->setText("Add");
+    root->addWidget(buttons_);
+    
+    connect(buttons_, &QDialogButtonBox::accepted, this, &AddProductDialog::onAdd);
+    connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    resize(400, 150);
+}
+
+void AddProductDialog::onAdd() {
+    try {
+        std::string name = formatName(ss(nameEdit_->text()));
+        double price = parsePrice(priceEdit_->text());
+        bool ok = false;
+        int stock = stockEdit_->text().toInt(&ok);
+        if (!ok || stock < 0) stock = 0;
+        
+        productSvc_.addProduct(name, price, stock);
+        productSvc_.save();
+        addedProductName_ = name;
+        accept();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+
+====================
+src/ui/EditOrderDialog.cpp
+
+#include "include/ui/EditOrderDialog.h"
+#include "include/ui/UtilsQt.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/utils/validation_utils.h"
+#include "include/core/Product.h"
+#include "include/core/Order.h"
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QHBoxLayout>
+#include <QMessageBox>
+#include <QIntValidator>
+#include <QSet>
+#include <QHeaderView>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <algorithm>
+
+EditOrderDialog::EditOrderDialog(OrderService& svc, int orderId, QWidget* parent)
+    : QDialog(parent), svc_(svc), productSvc_(nullptr), orderId_(orderId), addItemCompleter_(nullptr) {
+    setWindowTitle("Edit order");
+    auto* root = new QVBoxLayout(this);
+
+    auto* idRow = new QFormLayout();
+    idEdit_ = new QLineEdit(this);
+    idEdit_->setText(QString::number(orderId_));
+    idEdit_->setReadOnly(true);
+    idRow->addRow("Order ID:", idEdit_);
+    root->addLayout(idRow);
+
+    auto* statusForm = new QFormLayout();
+    statusCombo_ = new QComboBox(this);
+    statusCombo_->addItems({"new","in_progress","done","canceled"});
+    statusForm->addRow("Status:", statusCombo_);
+    root->addLayout(statusForm);
+    
+    auto* applyStatusBtn = new QPushButton("Apply status", this);
+    root->addWidget(applyStatusBtn);
+    connect(applyStatusBtn, &QPushButton::clicked, this, &EditOrderDialog::onApplyStatus);
+
+    itemsTable_ = new QTableWidget(this);
+    itemsTable_->setColumnCount(4);
+    itemsTable_->setHorizontalHeaderLabels({"Product", "Quantity", "", ""});
+    itemsTable_->horizontalHeader()->setStretchLastSection(false);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+    itemsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    itemsTable_->setColumnWidth(2, 40);
+    itemsTable_->setColumnWidth(3, 40);
+    itemsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    itemsTable_->setSelectionMode(QAbstractItemView::NoSelection);
+    root->addWidget(itemsTable_);
+
+    auto* addSection = new QHBoxLayout();
+    addItemName_ = new QLineEdit(this);
+    addItemName_->setPlaceholderText("product name");
+    addQty_ = new QLineEdit(this);
+    addQty_->setPlaceholderText("quantity");
+    addQty_->setValidator(new QIntValidator(1, 1000000000, this));
+    addQty_->setMaximumWidth(100);
+    addItemBtn_ = new QPushButton("Add item", this);
+    addSection->addWidget(addItemName_);
+    addSection->addWidget(addQty_);
+    addSection->addWidget(addItemBtn_);
+    root->addLayout(addSection);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    root->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    connect(addItemBtn_, &QPushButton::clicked, this, &EditOrderDialog::onAddItem);
+    
+    setupCompleters();
+    refreshItemsTable();
+    resize(500, 500);
+}
+
+void EditOrderDialog::setProductService(ProductService* productSvc) {
+    productSvc_ = productSvc;
+    setupCompleters();
+    refreshItemsTable();
+}
+
+void EditOrderDialog::setupCompleters() {
+    QStringList productNames;
+    
+    if (productSvc_) {
+        const auto& products = productSvc_->all();
+        for (const auto& kv : products) {
+            productNames << qs(kv.second.name);
+        }
+    } else {
+        const auto& prices = svc_.price();
+        QSet<QString> productSet;
+        for (const auto& kv : prices) {
+            productSet.insert(qs(kv.first));
+        }
+        productNames = productSet.values();
+    }
+    
+    productNames.sort(Qt::CaseInsensitive);
+    
+    if (addItemCompleter_) {
+        delete addItemCompleter_;
+    }
+    addItemCompleter_ = new QCompleter(productNames, this);
+    addItemCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+    addItemCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+    addItemCompleter_->setFilterMode(Qt::MatchContains);
+    addItemName_->setCompleter(addItemCompleter_);
+}
+
+void EditOrderDialog::refreshItemsTable() {
+    Order* o = svc_.findById(orderId_);
+    if (!o) return;
+    
+    int statusIndex = statusCombo_->findText(qs(o->status));
+    if (statusIndex >= 0) {
+        statusCombo_->setCurrentIndex(statusIndex);
+    }
+    
+    itemsTable_->setSortingEnabled(false);
+    itemsTable_->clearContents();
+    itemsTable_->setRowCount(static_cast<int>(o->items.size()));
+    
+    int row = 0;
+    for (const auto& kv : o->items) {
+        std::string displayName = kv.first;
+        if (productSvc_) {
+            const Product* prod = productSvc_->findProduct(kv.first);
+            if (prod) {
+                displayName = prod->name;
+            }
+        }
+        
+        auto* nameItem = new QTableWidgetItem(qs(displayName));
+        nameItem->setTextAlignment(Qt::AlignCenter);
+        itemsTable_->setItem(row, 0, nameItem);
+        
+        auto* qtyItem = new QTableWidgetItem(QString::number(kv.second));
+        qtyItem->setTextAlignment(Qt::AlignCenter);
+        itemsTable_->setItem(row, 1, qtyItem);
+        
+        auto* editBtn = new QPushButton("⚙️", this);
+        editBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #2196F3;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #1976D2;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #0D47A1;"
+            "}"
+        );
+        editBtn->setToolTip("Edit quantity");
+        editBtn->setFixedSize(35, 25);
+        connect(editBtn, &QPushButton::clicked, this, [this, itemKey = kv.first, currentQty = kv.second]() {
+            onEditItem(itemKey, currentQty);
+        });
+        
+        auto* deleteBtn = new QPushButton("❌", this);
+        deleteBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #F44336;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #D32F2F;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #B71C1C;"
+            "}"
+        );
+        deleteBtn->setToolTip("Delete item");
+        deleteBtn->setFixedSize(35, 25);
+        connect(deleteBtn, &QPushButton::clicked, this, [this, itemKey = kv.first]() {
+            onDeleteItem(itemKey);
+        });
+        
+        auto* editWidget = new QWidget(this);
+        auto* editLayout = new QHBoxLayout(editWidget);
+        editLayout->setAlignment(Qt::AlignCenter);
+        editLayout->setContentsMargins(0, 0, 0, 0);
+        editLayout->addWidget(editBtn);
+        itemsTable_->setCellWidget(row, 2, editWidget);
+        
+        auto* deleteWidget = new QWidget(this);
+        auto* deleteLayout = new QHBoxLayout(deleteWidget);
+        deleteLayout->setAlignment(Qt::AlignCenter);
+        deleteLayout->setContentsMargins(0, 0, 0, 0);
+        deleteLayout->addWidget(deleteBtn);
+        itemsTable_->setCellWidget(row, 3, deleteWidget);
+        
+        row++;
+    }
+    
+    itemsTable_->resizeRowsToContents();
+    itemsTable_->setSortingEnabled(true);
+}
+
+Order* EditOrderDialog::orderOrWarn() {
+    Order* o = svc_.findById(orderId_);
+    if (!o) QMessageBox::warning(this, "error", "order not found");
+    return o;
+}
+
+void EditOrderDialog::onApplyStatus() {
+    try {
+        Order* o = orderOrWarn();
+        if (!o) return;
+        std::string st = ss(statusCombo_->currentText());
+        ValidationService V;
+        V.validate_status(st);
+        svc_.setStatus(*o, st);
+        refreshItemsTable();
+        QMessageBox::information(this, "ok", "status updated");
+        emit dataChanged();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+void EditOrderDialog::onAddItem() {
+    try {
+        Order* o = orderOrWarn();
+        if (!o) return;
+        std::string name = formatName(ss(addItemName_->text()));
+        ValidationService V;
+        V.validate_item_name(name);
+        bool ok = false;
+        int q = addQty_->text().toInt(&ok);
+        if (!ok) throw ValidationException("invalid qty");
+        V.validate_qty(q);
+        svc_.addItem(*o, name, q);
+        addItemName_->clear();
+        addQty_->clear();
+        refreshItemsTable();
+        QMessageBox::information(this, "ok", "item added");
+        emit dataChanged();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+void EditOrderDialog::onEditItem(const std::string& itemKey, int currentQty) {
+    try {
+        Order* o = orderOrWarn();
+        if (!o) return;
+        
+        QDialog* editDialog = new QDialog(this);
+        editDialog->setWindowTitle("Edit quantity");
+        auto* layout = new QVBoxLayout(editDialog);
+        
+        auto* form = new QFormLayout();
+        auto* qtyEdit = new QLineEdit(editDialog);
+        qtyEdit->setText(QString::number(currentQty));
+        qtyEdit->setValidator(new QIntValidator(1, 1000000000, editDialog));
+        form->addRow("Quantity:", qtyEdit);
+        layout->addLayout(form);
+        
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
+        buttons->button(QDialogButtonBox::Ok)->setText("Save");
+        layout->addWidget(buttons);
+        
+        connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, qtyEdit, o, itemKey, currentQty]() {
+            try {
+                bool ok = false;
+                int newQty = qtyEdit->text().toInt(&ok);
+                if (!ok || newQty <= 0) {
+                    QMessageBox::warning(editDialog, "error", "Invalid quantity");
+                    return;
+                }
+                
+                if (newQty == currentQty) {
+                    editDialog->accept();
+                    return;
+                }
+                
+                int diff = newQty - currentQty;
+                if (diff > 0) {
+                    svc_.addItem(*o, itemKey, diff);
+                } else {
+                    svc_.removeItem(*o, itemKey);
+                    if (newQty > 0) {
+                        svc_.addItem(*o, itemKey, newQty);
+                    }
+                }
+                
+                refreshItemsTable();
+                editDialog->accept();
+                QMessageBox::information(this, "ok", "quantity updated");
+                emit dataChanged();
+            } catch (const CustomException& e) {
+                QMessageBox::warning(editDialog, "error", qs(e.what()));
+            }
+        });
+        
+        connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
+        
+        editDialog->resize(300, 120);
+        editDialog->exec();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+void EditOrderDialog::onDeleteItem(const std::string& itemKey) {
+    try {
+        Order* o = orderOrWarn();
+        if (!o) return;
+        svc_.removeItem(*o, itemKey);
+        refreshItemsTable();
+        QMessageBox::information(this, "ok", "item removed");
+        emit dataChanged();
+    } catch (const CustomException& e) {
+        QMessageBox::warning(this, "error", qs(e.what()));
+    }
+}
+
+====================
+src/ui/FilterDialog.cpp
+
+#include "include/ui/FilterDialog.h"
+#include <QVBoxLayout>
+#include <QFormLayout>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QDialogButtonBox>
+#include <QLabel>
+#include <QDateTimeEdit>
+#include <QCheckBox>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
+
+FilterDialog::FilterDialog(const QString& currentClient,
+                           const QString& currentStatus,
+                           const QString& minTotal,
+                           const QString& maxTotal,
+                           const QString& minId,
+                           const QString& maxId,
+                           const QDateTime& fromDt,
+                           bool useFrom,
+                           const QDateTime& toDt,
+                           bool useTo,
+                           QWidget* parent)
+    : QDialog(parent) {
+    setWindowTitle("Filter Orders");
+    auto* root = new QVBoxLayout(this);
+
+    auto* form = new QFormLayout();
+    clientEdit_ = new QLineEdit(this);
+    clientEdit_->setPlaceholderText("Enter client name");
+    clientEdit_->setText(currentClient);
+
+    statusCombo_ = new QComboBox(this);
+    statusCombo_->addItems({"Any", "new", "in_progress", "done", "canceled"});
+    int idx = 0;
+    if (currentStatus == "new") idx = 1;
+    else if (currentStatus == "in_progress") idx = 2;
+    else if (currentStatus == "done") idx = 3;
+    else if (currentStatus == "canceled") idx = 4;
+    statusCombo_->setCurrentIndex(idx);
+
+    QRegularExpression intRe("^[0-9]*$");
+    QRegularExpression dblRe("^[0-9]+([\\.,][0-9]+)?$");
+
+    minTotalEdit_ = new QLineEdit(this);
+    minTotalEdit_->setPlaceholderText("min total");
+    minTotalEdit_->setText(minTotal);
+    minTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+
+    maxTotalEdit_ = new QLineEdit(this);
+    maxTotalEdit_->setPlaceholderText("max total");
+    maxTotalEdit_->setText(maxTotal);
+    maxTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+
+    minIdEdit_ = new QLineEdit(this);
+    minIdEdit_->setPlaceholderText("min id");
+    minIdEdit_->setText(minId);
+    minIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+
+    maxIdEdit_ = new QLineEdit(this);
+    maxIdEdit_->setPlaceholderText("max id");
+    maxIdEdit_->setText(maxId);
+    maxIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+
+    auto* dateRowFrom = new QHBoxLayout();
+    useFromCheck_ = new QCheckBox("From:", this);
+    fromDateEdit_ = new QDateTimeEdit(this);
+    fromDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    fromDateEdit_->setCalendarPopup(true);
+    fromDateEdit_->setDateTime(fromDt.isValid() ? fromDt : QDateTime::currentDateTime());
+    useFromCheck_->setChecked(useFrom);
+    dateRowFrom->addWidget(useFromCheck_);
+    dateRowFrom->addWidget(fromDateEdit_);
+
+    auto* dateRowTo = new QHBoxLayout();
+    useToCheck_ = new QCheckBox("To:", this);
+    toDateEdit_ = new QDateTimeEdit(this);
+    toDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    toDateEdit_->setCalendarPopup(true);
+    toDateEdit_->setDateTime(toDt.isValid() ? toDt : QDateTime::currentDateTime());
+    useToCheck_->setChecked(useTo);
+    dateRowTo->addWidget(useToCheck_);
+    dateRowTo->addWidget(toDateEdit_);
+
+    form->addRow("Client name:", clientEdit_);
+    form->addRow("Order status:", statusCombo_);
+    form->addRow("Total range:", new QWidget(this));
+    form->addRow("Min total:", minTotalEdit_);
+    form->addRow("Max total:", maxTotalEdit_);
+    form->addRow("ID range:", new QWidget(this));
+    form->addRow("Min id:", minIdEdit_);
+    form->addRow("Max id:", maxIdEdit_);
+
+    root->addLayout(form);
+    root->addLayout(dateRowFrom);
+    root->addLayout(dateRowTo);
+
+    buttons_ = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    root->addWidget(buttons_);
+
+    connect(buttons_, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons_, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    resize(420, 380);
+}
+
+QString FilterDialog::clientFilter() const { return clientEdit_->text().trimmed(); }
+QString FilterDialog::statusFilter() const { return statusCombo_->currentIndex() == 0 ? QString() : statusCombo_->currentText(); }
+QString FilterDialog::minTotalText() const { return minTotalEdit_->text().trimmed(); }
+QString FilterDialog::maxTotalText() const { return maxTotalEdit_->text().trimmed(); }
+QString FilterDialog::minIdText() const { return minIdEdit_->text().trimmed(); }
+QString FilterDialog::maxIdText() const { return maxIdEdit_->text().trimmed(); }
+bool FilterDialog::useFrom() const { return useFromCheck_->isChecked(); }
+bool FilterDialog::useTo() const { return useToCheck_->isChecked(); }
+QDateTime FilterDialog::fromDate() const { return fromDateEdit_->dateTime(); }
+QDateTime FilterDialog::toDate() const { return toDateEdit_->dateTime(); }
+
+====================
+src/ui/MainWindow.cpp
+
+#include "include/ui/UtilsQt.h"
+#include "include/ui/MainWindow.h"
+#include "include/ui/StatisticsWindow.h"
+#include "include/ui/NumericItem.h"
+#include "include/ui/AddOrderDialog.h"
+#include "include/ui/EditOrderDialog.h"
+#include "include/ui/ReportDialog.h"
+#include "include/ui/AddProductDialog.h"
+#include "include/core/Product.h"
+#include "include/core/Order.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/services/ReportService.h"
+#include <QVBoxLayout>
+#include <QIntValidator>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <vector>
+#include <QHBoxLayout>
+#include <QMessageBox>
+#include <QHeaderView>
+#include <QTimer>
+#include <QResizeEvent>
+#include <QLabel>
+#include <QDateTime>
+#include <QFile>
+#include <QDir>
+#include <QTextStream>
+#include <QInputDialog>
+#include <QCoreApplication>
+#include <QDateTimeEdit>
+#include <QCheckBox>
+#include <QRegularExpression>
+#include <QRegularExpressionValidator>
+#include <QFormLayout>
+#include <QStringConverter>
+#include <QFrame>
+#include <QSet>
+#include <QStringListModel>
+#include <algorithm>
+#include <cctype>
+#include <cmath>
+
+MainWindow::MainWindow(OrderService& svc, ProductService& productSvc, QWidget* parent)
+    : QMainWindow(parent), svc_(svc), productSvc_(productSvc), statisticsWindow_(nullptr), clientFilterCompleter_(nullptr), clientFilterModel_(nullptr) {
+    setWindowTitle("Order Management System");
+    
+    auto* central = new QWidget(this);
+    auto* root = new QVBoxLayout(central);
+    
+    tabs_ = new QTabWidget(this);
+    root->addWidget(tabs_);
+    
+    auto* ordersTab = new QWidget(this);
+    auto* ordersLayout = new QHBoxLayout(ordersTab);
+
+    auto* left = new QVBoxLayout();
+
+    auto* topRow = new QHBoxLayout();
+    titleLabel_ = new QLabel("Main Table", this);
+    titleLabel_->setStyleSheet("font-weight: bold; font-size: 16px;");
+    
+    topRow->addWidget(titleLabel_);
+    topRow->addStretch();
+    left->addLayout(topRow);
+
+    table_ = new QTableWidget(this);
+    table_->setColumnCount(7);
+    table_->setHorizontalHeaderLabels({"ID","Client","Items","Status","Total","Created At",""});
+    table_->horizontalHeader()->setStretchLastSection(false);
+    table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    table_->setColumnWidth(6, 40);
+    table_->setWordWrap(true);
+    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setSelectionMode(QAbstractItemView::NoSelection);
+    table_->setSortingEnabled(true);
+    left->addWidget(table_);
+
+    auto* actionRow = new QHBoxLayout();
+    addOrderBtn_ = new QPushButton("Add order", this);
+    reportBtn_ = new QPushButton("Report", this);
+    actionRow->addWidget(addOrderBtn_);
+    actionRow->addWidget(reportBtn_);
+    actionRow->addStretch();
+    left->addLayout(actionRow);
+
+    auto* right = new QVBoxLayout();
+    auto* filterLabel = new QLabel("Filters", this);
+    filterLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
+    right->addWidget(filterLabel);
+
+    auto* filterForm = new QFormLayout();
+    
+    clientFilterEdit_ = new QLineEdit(this);
+    clientFilterEdit_->setPlaceholderText("Enter client name");
+    filterForm->addRow("Client:", clientFilterEdit_);
+
+    statusFilterCombo_ = new QComboBox(this);
+    statusFilterCombo_->addItems({"Any", "new", "in_progress", "done", "canceled"});
+    filterForm->addRow("Status:", statusFilterCombo_);
+
+    QRegularExpression intRe("^[0-9]*$");
+    QRegularExpression dblRe("^[0-9]+([\\.,][0-9]+)?$");
+
+    minTotalEdit_ = new QLineEdit(this);
+    minTotalEdit_->setPlaceholderText("min total");
+    minTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+    filterForm->addRow("Min total:", minTotalEdit_);
+
+    maxTotalEdit_ = new QLineEdit(this);
+    maxTotalEdit_->setPlaceholderText("max total");
+    maxTotalEdit_->setValidator(new QRegularExpressionValidator(dblRe, this));
+    filterForm->addRow("Max total:", maxTotalEdit_);
+
+    minIdEdit_ = new QLineEdit(this);
+    minIdEdit_->setPlaceholderText("min id");
+    minIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+    filterForm->addRow("Min ID:", minIdEdit_);
+
+    maxIdEdit_ = new QLineEdit(this);
+    maxIdEdit_->setPlaceholderText("max id");
+    maxIdEdit_->setValidator(new QRegularExpressionValidator(intRe, this));
+    filterForm->addRow("Max ID:", maxIdEdit_);
+
+    useFromCheck_ = new QCheckBox("From date:", this);
+    fromDateEdit_ = new QDateTimeEdit(this);
+    fromDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    fromDateEdit_->setCalendarPopup(true);
+    fromDateEdit_->setDateTime(QDateTime::currentDateTime());
+    fromDateEdit_->setEnabled(false);
+    auto* fromLayout = new QHBoxLayout();
+    fromLayout->addWidget(useFromCheck_);
+    fromLayout->addWidget(fromDateEdit_);
+    filterForm->addRow(fromLayout);
+
+    useToCheck_ = new QCheckBox("To date:", this);
+    toDateEdit_ = new QDateTimeEdit(this);
+    toDateEdit_->setDisplayFormat("yyyy-MM-dd HH:mm:ss");
+    toDateEdit_->setCalendarPopup(true);
+    toDateEdit_->setDateTime(QDateTime::currentDateTime());
+    toDateEdit_->setEnabled(false);
+    auto* toLayout = new QHBoxLayout();
+    toLayout->addWidget(useToCheck_);
+    toLayout->addWidget(toDateEdit_);
+    filterForm->addRow(toLayout);
+
+    right->addLayout(filterForm);
+    
+    clearFilterBtn_ = new QPushButton("Clear all filters", this);
+    clearFilterBtn_->setEnabled(false);
+    clearFilterBtn_->setStyleSheet(
+        "QPushButton:disabled {"
+        "background-color: #9E9E9E;"
+        "color: #E0E0E0;"
+        "border: none;"
+        "padding: 5px;"
+        "border-radius: 3px;"
+        "}"
+    );
+    right->addWidget(clearFilterBtn_);
+    
+    right->addSpacing(20);
+    
+    auto* statsLabel = new QLabel("Statistics", this);
+    statsLabel->setStyleSheet("font-weight: bold; font-size: 14px; margin-top: 10px;");
+    right->addWidget(statsLabel);
+    
+    auto* statsLayout = new QVBoxLayout();
+    statsNewLabel_ = new QLabel("New: 0", this);
+    statsInProgressLabel_ = new QLabel("In Progress: 0", this);
+    statsDoneLabel_ = new QLabel("Done: 0", this);
+    statsCanceledLabel_ = new QLabel("Canceled: 0", this);
+    statsTotalRevenueLabel_ = new QLabel("Total Revenue: $0.00", this);
+    statsTotalRevenueLabel_->setStyleSheet("font-weight: bold; margin-top: 5px;");
+    
+    statsLayout->addWidget(statsNewLabel_);
+    statsLayout->addWidget(statsInProgressLabel_);
+    statsLayout->addWidget(statsDoneLabel_);
+    statsLayout->addWidget(statsCanceledLabel_);
+    statsLayout->addWidget(statsTotalRevenueLabel_);
+    
+    openChartsBtn_ = new QPushButton("Open Charts", this);
+    statsLayout->addWidget(openChartsBtn_);
+    
+    right->addLayout(statsLayout);
+    right->addStretch();
+
+    ordersLayout->addLayout(left, 3);
+    ordersLayout->addLayout(right, 1);
+    tabs_->addTab(ordersTab, "Orders");
+    
+    auto* productsTab = new QWidget(this);
+    auto* productsLayout = new QHBoxLayout(productsTab);
+    
+    auto* productsLeft = new QVBoxLayout();
+    productTable_ = new QTableWidget(this);
+    productTable_->setColumnCount(5);
+    productTable_->setHorizontalHeaderLabels({"Product","Price","Stock","",""});
+    productTable_->horizontalHeader()->setStretchLastSection(false);
+    productTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    productTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    productTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    productTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+    productTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
+    productTable_->setColumnWidth(3, 40);
+    productTable_->setColumnWidth(4, 40);
+    productTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    productTable_->setSelectionMode(QAbstractItemView::NoSelection);
+    productTable_->setSortingEnabled(true);
+    productsLeft->addWidget(productTable_);
+    
+    auto* prodButtons = new QHBoxLayout();
+    addProductBtn_ = new QPushButton("Add product", this);
+    prodButtons->addWidget(addProductBtn_);
+    prodButtons->addStretch();
+    productsLeft->addLayout(prodButtons);
+    
+    auto* productsRight = new QVBoxLayout();
+    auto* productStatsLabel = new QLabel("Product Statistics", this);
+    productStatsLabel->setStyleSheet("font-weight: bold; font-size: 14px;");
+    productsRight->addWidget(productStatsLabel);
+    
+    productStatsLowStockLabel_ = new QLabel("Low Stock (Top 3):", this);
+    productStatsHighStockLabel_ = new QLabel("High Stock (Top 3):", this);
+    productStatsExpensiveLabel_ = new QLabel("Most Expensive (Top 3):", this);
+    productStatsCheapLabel_ = new QLabel("Cheapest (Top 3):", this);
+    productStatsTotalCountLabel_ = new QLabel("Total Products: 0", this);
+    productStatsTotalValueLabel_ = new QLabel("Total Value: $0.00", this);
+    
+    productsRight->addWidget(productStatsLowStockLabel_);
+    productsRight->addWidget(productStatsHighStockLabel_);
+    productsRight->addWidget(productStatsExpensiveLabel_);
+    productsRight->addWidget(productStatsCheapLabel_);
+    productsRight->addSpacing(20);
+    productsRight->addWidget(productStatsTotalCountLabel_);
+    productsRight->addWidget(productStatsTotalValueLabel_);
+    productsRight->addStretch();
+    
+    productsLayout->addLayout(productsLeft, 3);
+    productsLayout->addLayout(productsRight, 1);
+    tabs_->addTab(productsTab, "Products");
+    
+    setCentralWidget(central);
+
+    connect(addOrderBtn_, &QPushButton::clicked, this, &MainWindow::onAddOrder);
+    connect(reportBtn_, &QPushButton::clicked, this, &MainWindow::onOpenReportDialog);
+    connect(openChartsBtn_, &QPushButton::clicked, this, &MainWindow::onOpenStatistics);
+    connect(clearFilterBtn_, &QPushButton::clicked, this, &MainWindow::onClearFilter);
+    connect(addProductBtn_, &QPushButton::clicked, this, &MainWindow::onAddProduct);
+
+    connect(clientFilterEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(statusFilterCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onFilterChanged);
+    connect(minTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(maxTotalEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(minIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(maxIdEdit_, &QLineEdit::textChanged, this, &MainWindow::onFilterChanged);
+    connect(useFromCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        fromDateEdit_->setEnabled(checked);
+        onFilterChanged();
+    });
+    connect(useToCheck_, &QCheckBox::toggled, this, [this](bool checked) {
+        toDateEdit_->setEnabled(checked);
+        onFilterChanged();
+    });
+    connect(fromDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
+    connect(toDateEdit_, &QDateTimeEdit::dateTimeChanged, this, &MainWindow::onFilterChanged);
+
+    setupCompleters();
+    showMaximized();
+    refreshTable();
+    refreshProducts();
+    updateStatistics();
+    updateProductStatistics();
+    QTimer::singleShot(0, this, [this] { resizeEvent(nullptr); });
+}
+
+QList<const Order*> MainWindow::currentFilteredRows() const {
+    const auto& all = svc_.all();
+    QList<const Order*> rows;
+    for (const auto& o : all) {
+        bool ok = true;
+        if (!activeClientFilter_.isEmpty()) {
+            QString c = qs(o.client);
+            ok = ok && c.toLower().contains(activeClientFilter_.toLower());
+        }
+        if (!activeStatusFilter_.isEmpty()) {
+            ok = ok && (qs(o.status).compare(activeStatusFilter_, Qt::CaseInsensitive) == 0);
+        }
+        if (!minTotalText_.isEmpty()) {
+            QString t = minTotalText_; t.replace(',', '.');
+            bool b = false; double v = t.toDouble(&b);
+            if (b) ok = ok && (o.total >= v);
+        }
+        if (!maxTotalText_.isEmpty()) {
+            QString t = maxTotalText_; t.replace(',', '.');
+            bool b = false; double v = t.toDouble(&b);
+            if (b) ok = ok && (o.total <= v);
+        }
+        if (!minIdText_.isEmpty()) {
+            bool b = false; int v = minIdText_.toInt(&b);
+            if (b) ok = ok && (o.id >= v);
+        }
+        if (!maxIdText_.isEmpty()) {
+            bool b = false; int v = maxIdText_.toInt(&b);
+            if (b) ok = ok && (o.id <= v);
+        }
+        if (useFrom_ || useTo_) {
+            QDateTime created = QDateTime::fromString(qs(o.createdAt), Qt::ISODate);
+            if (useFrom_) ok = ok && (created >= fromDate_);
+            if (useTo_) ok = ok && (created <= toDate_);
+        }
+        if (ok) rows.push_back(&o);
+    }
+    return rows;
+}
+
+void MainWindow::refreshTable() {
+    table_->setSortingEnabled(false);
+    table_->clearSpans();
+    table_->clearContents();
+
+    QList<const Order*> rows = currentFilteredRows();
+
+    if (rows.isEmpty()) {
+        table_->setRowCount(1);
+        table_->setSpan(0, 0, 1, table_->columnCount());
+        auto* item = new QTableWidgetItem("Not found");
+        item->setTextAlignment(Qt::AlignCenter);
+        QFont f = item->font();
+        f.setItalic(true);
+        item->setFont(f);
+        table_->setItem(0, 0, item);
+    } else {
+        table_->setRowCount(rows.size());
+        int r = 0;
+        for (auto* op : rows) {
+            const auto& o = *op;
+            QString itemsStr;
+            bool first = true;
+            for (auto& kv : o.items) {
+                auto pit = svc_.price().find(kv.first);
+                QString priceText = (pit != svc_.price().end())
+                    ? QString::number(pit->second, 'f', 2)
+                    : QString("n/a");
+                if (!first) itemsStr += "\n";
+                itemsStr += QString("%1 ×%2 (%3)")
+                    .arg(qs(kv.first))
+                    .arg(kv.second)
+                    .arg(priceText);
+                first = false;
+            }
+            auto* idCell = new NumericItem(o.id, QString::number(o.id));
+            idCell->setTextAlignment(Qt::AlignCenter);
+            
+            auto* clientCell = new QTableWidgetItem(qs(o.client));
+            clientCell->setTextAlignment(Qt::AlignCenter);
+            
+            auto* itemCell = new QTableWidgetItem(itemsStr);
+            itemCell->setTextAlignment(Qt::AlignCenter);
+            
+            auto* statusCell = new QTableWidgetItem(qs(o.status));
+            statusCell->setTextAlignment(Qt::AlignCenter);
+            if (o.status == "new") { statusCell->setBackground(QColor("#388E3C")); statusCell->setForeground(QBrush(Qt::white)); }
+            else if (o.status == "in_progress") { statusCell->setBackground(QColor("#FBC02D")); statusCell->setForeground(QBrush(Qt::black)); }
+            else if (o.status == "done") { statusCell->setBackground(QColor("#1976D2")); statusCell->setForeground(QBrush(Qt::white)); }
+            else if (o.status == "canceled") { statusCell->setBackground(QColor("#D32F2F")); statusCell->setForeground(QBrush(Qt::white)); }
+            
+            auto* totalCell = new NumericItem(o.total, QString::number(o.total, 'f', 2));
+            totalCell->setTextAlignment(Qt::AlignCenter);
+            
+            QString createdAtStr = qs(o.createdAt);
+            createdAtStr.replace("T", " ");
+            auto* createdCell = new QTableWidgetItem(createdAtStr);
+            createdCell->setTextAlignment(Qt::AlignCenter);
+            
+            auto* editBtn = new QPushButton("⚙️", this);
+            editBtn->setStyleSheet(
+                "QPushButton {"
+                "background-color: #2196F3;"
+                "color: white;"
+                "border: none;"
+                "padding: 4px 8px;"
+                "border-radius: 4px;"
+                "font-size: 14px;"
+                "}"
+                "QPushButton:hover {"
+                "background-color: #1976D2;"
+                "}"
+                "QPushButton:pressed {"
+                "background-color: #0D47A1;"
+                "}"
+            );
+            editBtn->setToolTip("Edit order");
+            editBtn->setFixedSize(35, 25);
+            connect(editBtn, &QPushButton::clicked, this, [this, orderId = o.id]() {
+                const Order* order = svc_.findById(orderId);
+                if (!order) {
+                    QMessageBox::warning(this, "error", "order not found");
+                    return;
+                }
+                EditOrderDialog editDlg(svc_, orderId, this);
+                editDlg.setProductService(&productSvc_);
+                connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
+                editDlg.exec();
+                refreshTable();
+                updateStatistics();
+            });
+            
+            auto* widgetContainer = new QWidget(this);
+            auto* layout = new QHBoxLayout(widgetContainer);
+            layout->setContentsMargins(0, 0, 0, 0);
+            layout->addStretch();
+            layout->addWidget(editBtn);
+            layout->addStretch();
+            layout->setAlignment(Qt::AlignCenter);
+            
+            table_->setItem(r, 0, idCell);
+            table_->setItem(r, 1, clientCell);
+            table_->setItem(r, 2, itemCell);
+            table_->setItem(r, 3, statusCell);
+            table_->setItem(r, 4, totalCell);
+            table_->setItem(r, 5, createdCell);
+            table_->setCellWidget(r, 6, widgetContainer);
+            ++r;
+        }
+        table_->resizeRowsToContents();
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            int h = table_->rowHeight(row);
+            table_->setRowHeight(row, h + 8);
+        }
+    }
+
+    bool filterActive = !activeClientFilter_.isEmpty() || !activeStatusFilter_.isEmpty()
+                        || !minTotalText_.isEmpty() || !maxTotalText_.isEmpty()
+                        || !minIdText_.isEmpty() || !maxIdText_.isEmpty()
+                        || useFrom_ || useTo_;
+
+    int foundCount = rows.size();
+    if (filterActive) {
+        titleLabel_->setText(QString("Filtered Table (%1 orders)").arg(foundCount));
+        clearFilterBtn_->setEnabled(true);
+        clearFilterBtn_->setStyleSheet(
+            "QPushButton {"
+            "background-color: #F44336;"
+            "color: white;"
+            "border: none;"
+            "padding: 5px;"
+            "border-radius: 3px;"
+            "font-weight: bold;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #D32F2F;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #B71C1C;"
+            "}"
+        );
+    } else {
+        titleLabel_->setText(QString("Main Table (%1 orders)").arg((int)svc_.all().size()));
+        clearFilterBtn_->setEnabled(false);
+        clearFilterBtn_->setStyleSheet(
+            "QPushButton:disabled {"
+            "background-color: #9E9E9E;"
+            "color: #E0E0E0;"
+            "border: none;"
+            "padding: 5px;"
+            "border-radius: 3px;"
+            "}"
+        );
+    }
+
+    table_->setSortingEnabled(!rows.isEmpty());
+    titleLabel_->update();
+    updateStatistics();
+    
+    if (statisticsWindow_ && statisticsWindow_->isVisible()) {
+        statisticsWindow_->refreshStatistics();
+    }
+    
+    setupCompleters();
+}
+
+
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    if (table_) {
+        table_->resizeRowsToContents();
+        for (int row = 0; row < table_->rowCount(); ++row) {
+            int h = table_->rowHeight(row);
+            table_->setRowHeight(row, h + 8);
+        }
+    }
+}
+
+
+void MainWindow::onAddOrder() {
+    AddOrderDialog dlg(svc_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        int createdId = dlg.createdOrderId();
+        refreshTable();
+        EditOrderDialog editDlg(svc_, createdId, this);
+        editDlg.setProductService(&productSvc_);
+        connect(&editDlg, &EditOrderDialog::dataChanged, this, &MainWindow::refreshTable);
+        editDlg.exec();
+        refreshTable();
+        updateStatistics();
+    }
+}
+
+
+void MainWindow::onOpenReportDialog() {
+    bool filterActive = !activeClientFilter_.isEmpty() || !activeStatusFilter_.isEmpty()
+                        || !minTotalText_.isEmpty() || !maxTotalText_.isEmpty()
+                        || !minIdText_.isEmpty() || !maxIdText_.isEmpty()
+                        || useFrom_ || useTo_;
+    ReportDialog dlg(filterActive, this);
+    if (dlg.exec() != QDialog::Accepted) return;
+
+    QList<const Order*> rows = dlg.scopeFiltered() ? currentFilteredRows() : QList<const Order*>{};
+    if (!dlg.scopeFiltered()) {
+        for (const auto& o : svc_.all()) rows.push_back(&o);
+    }
+    if (rows.isEmpty()) {
+        QMessageBox::information(this, "report", "nothing to report");
+        return;
+    }
+
+    ReportFilterInfo filterInfo;
+    filterInfo.clientFilter = activeClientFilter_;
+    filterInfo.statusFilter = activeStatusFilter_;
+    filterInfo.minTotal = minTotalText_;
+    filterInfo.maxTotal = maxTotalText_;
+    filterInfo.minId = minIdText_;
+    filterInfo.maxId = maxIdText_;
+    filterInfo.fromDate = fromDate_;
+    filterInfo.toDate = toDate_;
+    filterInfo.useFrom = useFrom_;
+    filterInfo.useTo = useTo_;
+
+    QString fileName = ReportService::generateReport(
+        rows,
+        dlg.reportName(),
+        dlg.scopeFiltered(),
+        dlg.includeFiltersHeader(),
+        dlg.includeSummarySection(),
+        filterInfo,
+        svc_
+    );
+
+    if (fileName.isEmpty()) {
+        QMessageBox::warning(this, "error", "cannot create report file");
+        return;
+    }
+
+    QMessageBox::information(this, "report", QString("Excel report created: %1").arg(fileName));
+}
+
+static double parsePrice(const QString& input) {
+    QString s = input.trimmed();
+    if (s.isEmpty()) throw ValidationException("price cannot be empty");
+    s.replace(',', '.');
+    bool ok = false;
+    double price = s.toDouble(&ok);
+    if (!ok || price <= 0.0) throw ValidationException("invalid price");
+    double cents = std::round(price * 100.0);
+    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
+    price = cents / 100.0;
+    return price;
+}
+
+void MainWindow::refreshProducts() {
+    productTable_->setSortingEnabled(false);
+    const auto& p = productSvc_.all();
+    productTable_->clearContents();
+    productTable_->setRowCount((int)p.size());
+    int i = 0;
+    for (auto& kv : p) {
+        const Product& prod = kv.second;
+        std::string productKey = kv.first;
+        
+        auto* nameCell = new QTableWidgetItem(qs(prod.name));
+        nameCell->setTextAlignment(Qt::AlignCenter);
+        auto* priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
+        priceCell->setTextAlignment(Qt::AlignCenter);
+        auto* stockCell = new QTableWidgetItem(QString::number(prod.stock));
+        stockCell->setTextAlignment(Qt::AlignCenter);
+        
+        productTable_->setItem(i, 0, nameCell);
+        productTable_->setItem(i, 1, priceCell);
+        productTable_->setItem(i, 2, stockCell);
+        
+        auto* editBtn = new QPushButton("⚙️", this);
+        editBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #2196F3;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #1976D2;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #0D47A1;"
+            "}"
+        );
+        editBtn->setToolTip("Edit product");
+        editBtn->setFixedSize(35, 25);
+        connect(editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onEditProduct(productKey, productName);
+        });
+        
+        auto* deleteBtn = new QPushButton("❌", this);
+        deleteBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #F44336;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #D32F2F;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #B71C1C;"
+            "}"
+        );
+        deleteBtn->setToolTip("Delete product");
+        deleteBtn->setFixedSize(35, 25);
+        connect(deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onDeleteProduct(productKey, productName);
+        });
+        
+        auto* editWidget = new QWidget(this);
+        auto* editLayout = new QHBoxLayout(editWidget);
+        editLayout->setAlignment(Qt::AlignCenter);
+        editLayout->setContentsMargins(0, 0, 0, 0);
+        editLayout->addWidget(editBtn);
+        productTable_->setCellWidget(i, 3, editWidget);
+        
+        auto* deleteWidget = new QWidget(this);
+        auto* deleteLayout = new QHBoxLayout(deleteWidget);
+        deleteLayout->setAlignment(Qt::AlignCenter);
+        deleteLayout->setContentsMargins(0, 0, 0, 0);
+        deleteLayout->addWidget(deleteBtn);
+        productTable_->setCellWidget(i, 4, deleteWidget);
+        
+        ++i;
+    }
+    productTable_->setSortingEnabled(true);
+    
+    updateProductStatistics();
+}
+
+void MainWindow::onAddProduct() {
+    AddProductDialog dlg(productSvc_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        std::string addedName = dlg.addedProductName();
+        if (!addedName.empty()) {
+            svc_.setPrices(productSvc_.all());
+            std::string key = addedName;
+            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            svc_.recalculateOrdersWithProduct(key);
+            svc_.save();
+            refreshTable();
+        }
+        refreshProducts();
+    }
+}
+
+bool MainWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) {
+    affectedOrderIds.clear();
+    const auto& orders = svc_.all();
+    for (const auto& order : orders) {
+        if (order.status == "new" || order.status == "in_progress") {
+            if (order.items.find(productKey) != order.items.end()) {
+                affectedOrderIds.append(order.id);
+            }
+        }
+    }
+    return !affectedOrderIds.isEmpty();
+}
+
+void MainWindow::onDeleteProduct(const std::string& productKey, const std::string& productName) {
+    try {
+        QList<int> affectedOrderIds;
+        bool isUsed = isProductUsedInActiveOrders(productKey, affectedOrderIds);
+        
+        if (isUsed) {
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle("Delete Product");
+            msgBox.setIcon(QMessageBox::Warning);
+            msgBox.setText(QString("Product '%1' is used in %2 active order(s) (new or in_progress).")
+                          .arg(qs(productName))
+                          .arg(affectedOrderIds.size()));
+            msgBox.setInformativeText("What would you like to do?");
+            
+            QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+            QPushButton* cancelOrdersBtn = msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+            
+            msgBox.setDefaultButton(cancelBtn);
+            msgBox.exec();
+            
+            if (msgBox.clickedButton() == cancelBtn) {
+                return;
+            }
+            
+            svc_.setProductService(&productSvc_);
+            
+            for (int orderId : affectedOrderIds) {
+                Order* order = svc_.findById(orderId);
+                if (order) {
+                    try {
+                        svc_.setStatus(*order, "canceled");
+                    } catch (const CustomException& e) {
+                        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
+                                            .arg(orderId)
+                                            .arg(qs(e.what())));
+                    }
+                }
+            }
+            svc_.save();
+        }
+        
+        productSvc_.removeProduct(productName);
+        productSvc_.save();
+        svc_.setPrices(productSvc_.all());
+        svc_.save();
+        refreshProducts();
+        refreshTable();
+        
+        if (isUsed) {
+            QMessageBox::information(this, "ok", QString("Product removed. %1 order(s) were canceled.")
+                                    .arg(affectedOrderIds.size()));
+        } else {
+            QMessageBox::information(this, "ok", "product removed");
+        }
+    } catch (const CustomException& e) { 
+        QMessageBox::warning(this, "error", qs(e.what())); 
+    }
+}
+
+void MainWindow::onEditProduct(const std::string& productKey, const std::string& productName) {
+    const Product* product = productSvc_.findProduct(productName);
+    if (!product) {
+        QMessageBox::warning(this, "error", "product not found");
+        return;
+    }
+    
+    QDialog* editDialog = new QDialog(this);
+    editDialog->setWindowTitle("Edit Product");
+    editDialog->setModal(true);
+    
+    auto* layout = new QVBoxLayout(editDialog);
+    auto* form = new QFormLayout();
+    
+    QLineEdit* nameEdit = new QLineEdit(editDialog);
+    nameEdit->setText(qs(product->name));
+    form->addRow("Product name:", nameEdit);
+    
+    QLineEdit* priceEdit = new QLineEdit(editDialog);
+    priceEdit->setText(QString::number(product->price, 'f', 2));
+    form->addRow("Price:", priceEdit);
+    
+    QLineEdit* stockEdit = new QLineEdit(editDialog);
+    stockEdit->setText(QString::number(product->stock));
+    stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
+    form->addRow("Stock:", stockEdit);
+    
+    layout->addLayout(form);
+    
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
+    buttons->button(QDialogButtonBox::Ok)->setText("Save");
+    layout->addWidget(buttons);
+    
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, productKey, oldName = productName]() {
+        try {
+            std::string newName = formatName(ss(nameEdit->text()));
+            if (newName.empty()) {
+                QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
+                return;
+            }
+            
+            double oldPrice = 0.0;
+            const Product* oldProduct = productSvc_.findProduct(oldName);
+            if (oldProduct) {
+                oldPrice = oldProduct->price;
+            }
+            
+            double price = parsePrice(priceEdit->text());
+            bool ok = false;
+            int stock = stockEdit->text().toInt(&ok);
+            if (!ok || stock < 0) {
+                QMessageBox::warning(editDialog, "error", "Invalid stock value");
+                return;
+            }
+            
+            productSvc_.updateProduct(oldName, newName, price, stock);
+            productSvc_.save();
+            
+            svc_.setPrices(productSvc_.all());
+            bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
+            bool nameChanged = (oldName != newName);
+            
+            if (priceChanged || nameChanged) {
+                if (nameChanged) {
+                    std::string oldKey = oldName;
+                    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+                    svc_.recalculateOrdersWithProduct(oldKey);
+                }
+                std::string newKey = newName;
+                std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+                svc_.recalculateOrdersWithProduct(newKey);
+            }
+            svc_.save();
+            
+            refreshProducts();
+            refreshTable();
+            
+            editDialog->accept();
+            QMessageBox::information(this, "ok", "product updated");
+        } catch (const CustomException& e) {
+            QMessageBox::warning(editDialog, "error", qs(e.what()));
+        }
+    });
+    
+    connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
+    
+    editDialog->resize(400, 150);
+    editDialog->exec();
+    delete editDialog;
+}
+
+void MainWindow::updateProductStatistics() {
+    const auto& products = productSvc_.all();
+    
+    std::vector<std::pair<std::string, Product>> productsVec;
+    for (const auto& kv : products) {
+        productsVec.push_back({kv.first, kv.second});
+    }
+    
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.stock < b.second.stock; });
+    
+    QString lowStock = "Low Stock (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        lowStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
+    }
+    productStatsLowStockLabel_->setText(lowStock);
+    
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.stock > b.second.stock; });
+    
+    QString highStock = "High Stock (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        highStock += QString("  • %1: %2\n").arg(qs(productsVec[i].second.name)).arg(productsVec[i].second.stock);
+    }
+    productStatsHighStockLabel_->setText(highStock);
+    
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.price > b.second.price; });
+    
+    QString expensive = "Most Expensive (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        expensive += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
+                    .arg(QString::number(productsVec[i].second.price, 'f', 2));
+    }
+    productStatsExpensiveLabel_->setText(expensive);
+    
+    std::sort(productsVec.begin(), productsVec.end(), 
+        [](const auto& a, const auto& b) { return a.second.price < b.second.price; });
+    
+    QString cheap = "Cheapest (Top 3):\n";
+    for (size_t i = 0; i < std::min(3UL, productsVec.size()); ++i) {
+        cheap += QString("  • %1: $%2\n").arg(qs(productsVec[i].second.name))
+                .arg(QString::number(productsVec[i].second.price, 'f', 2));
+    }
+    productStatsCheapLabel_->setText(cheap);
+    
+    int totalCount = products.size();
+    double totalValue = 0.0;
+    for (const auto& kv : products) {
+        totalValue += kv.second.price * kv.second.stock;
+    }
+    
+    productStatsTotalCountLabel_->setText(QString("Total Products: %1").arg(totalCount));
+    productStatsTotalValueLabel_->setText(QString("Total Value: $%1").arg(QString::number(totalValue, 'f', 2)));
+}
+
+void MainWindow::onOpenStatistics() {
+    if (!statisticsWindow_) {
+        statisticsWindow_ = new StatisticsWindow(svc_, this);
+    }
+    statisticsWindow_->show();
+    statisticsWindow_->raise();
+    statisticsWindow_->activateWindow();
+}
+
+void MainWindow::updateStatistics() {
+    int newCount = 0;
+    int inProgressCount = 0;
+    int doneCount = 0;
+    int canceledCount = 0;
+    double totalRevenue = 0.0;
+    
+    const auto& all = svc_.all();
+    for (const auto& o : all) {
+        if (o.status == "new") newCount++;
+        else if (o.status == "in_progress") inProgressCount++;
+        else if (o.status == "done") doneCount++;
+        else if (o.status == "canceled") canceledCount++;
+        totalRevenue += o.total;
+    }
+    
+    statsNewLabel_->setText(QString("New: %1").arg(newCount));
+    statsInProgressLabel_->setText(QString("In Progress: %1").arg(inProgressCount));
+    statsDoneLabel_->setText(QString("Done: %1").arg(doneCount));
+    statsCanceledLabel_->setText(QString("Canceled: %1").arg(canceledCount));
+    statsTotalRevenueLabel_->setText(QString("Total Revenue: $%1").arg(QString::number(totalRevenue, 'f', 2)));
+}
+
+void MainWindow::applyFilters() {
+    activeClientFilter_ = clientFilterEdit_->text().trimmed();
+    activeStatusFilter_ = statusFilterCombo_->currentIndex() == 0 ? QString() : statusFilterCombo_->currentText();
+    minTotalText_ = minTotalEdit_->text().trimmed();
+    maxTotalText_ = maxTotalEdit_->text().trimmed();
+    minIdText_ = minIdEdit_->text().trimmed();
+    maxIdText_ = maxIdEdit_->text().trimmed();
+    useFrom_ = useFromCheck_->isChecked();
+    useTo_ = useToCheck_->isChecked();
+    fromDate_ = fromDateEdit_->dateTime();
+    toDate_ = toDateEdit_->dateTime();
+    refreshTable();
+}
+
+void MainWindow::onFilterChanged() {
+    applyFilters();
+}
+
+void MainWindow::onClearFilter() {
+    clientFilterEdit_->clear();
+    statusFilterCombo_->setCurrentIndex(0);
+    minTotalEdit_->clear();
+    maxTotalEdit_->clear();
+    minIdEdit_->clear();
+    maxIdEdit_->clear();
+    useFromCheck_->setChecked(false);
+    useToCheck_->setChecked(false);
+    fromDateEdit_->setDateTime(QDateTime::currentDateTime());
+    toDateEdit_->setDateTime(QDateTime::currentDateTime());
+    applyFilters();
+}
+
+void MainWindow::setupCompleters() {
+    QSet<QString> clientSet;
+    const auto& orders = svc_.all();
+    for (const auto& order : orders) {
+        clientSet.insert(qs(order.client));
+    }
+    
+    QStringList clientNames = clientSet.values();
+    clientNames.sort(Qt::CaseInsensitive);
+    
+    if (!clientFilterModel_) {
+        clientFilterModel_ = new QStringListModel(clientNames, this);
+        clientFilterCompleter_ = new QCompleter(clientFilterModel_, this);
+        clientFilterCompleter_->setCaseSensitivity(Qt::CaseInsensitive);
+        clientFilterCompleter_->setCompletionMode(QCompleter::PopupCompletion);
+        clientFilterCompleter_->setFilterMode(Qt::MatchContains);
+        clientFilterEdit_->setCompleter(clientFilterCompleter_);
+    } else {
+        clientFilterModel_->setStringList(clientNames);
+    }
+}
+
+====================
+src/ui/mainwindow.ui
+
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+    <class>MainWindow</class>
+    <widget class="QMainWindow" name="MainWindow">
+        <property name="windowTitle">
+            <string>Order Management</string>
+        </property>
+        <widget class="QWidget" name="centralwidget"/>
+    </widget>
+    <resources/>
+    <connections/>
+</ui>
+
+====================
+src/ui/ProductWindow.cpp
+
+#include "include/ui/ProductWindow.h"
+#include "include/ui/AddProductDialog.h"
+#include "include/ui/UtilsQt.h"
+#include "include/ui/NumericItem.h"
+#include "include/Errors/CustomExceptions.h"
+#include "include/core/Order.h"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QMessageBox>
+#include <QHeaderView>
+#include <QIntValidator>
+#include <QShowEvent>
+#include <QStringListModel>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QPushButton>
+#include <QLabel>
+#include <algorithm>
+#include <cmath>
+
+static double parsePrice(const QString& input) {
+    QString s = input.trimmed();
+    if (s.isEmpty()) throw ValidationException("price cannot be empty");
+    s.replace(',', '.');
+    bool ok = false;
+    double price = s.toDouble(&ok);
+    if (!ok || price <= 0.0) throw ValidationException("invalid price");
+    double cents = std::round(price * 100.0);
+    if (std::fabs(price * 100.0 - cents) > 1e-9) throw ValidationException("price must have max 2 decimals");
+    price = cents / 100.0;
+    return price;
+}
+
+ProductWindow::ProductWindow(ProductService& productSvc, OrderService& orderSvc, QWidget* parent)
+    : QMainWindow(parent), productSvc_(productSvc), orderSvc_(orderSvc), productNameCompleter_(nullptr) {
+    setWindowTitle("Products");
+    
+    auto* central = new QWidget(this);
+    auto* root = new QVBoxLayout(central);
+
+    productTable_ = new QTableWidget(this);
+    productTable_->setColumnCount(5);
+    productTable_->setHorizontalHeaderLabels({"Product","Price","Stock","",""});
+    productTable_->horizontalHeader()->setStretchLastSection(false);
+    productTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    productTable_->setSelectionMode(QAbstractItemView::NoSelection);
+    productTable_->setSortingEnabled(true);
+    root->addWidget(productTable_);
+
+    auto* prodButtons = new QHBoxLayout();
+    addProductBtn_ = new QPushButton("Add product", this);
+    prodButtons->addWidget(addProductBtn_);
+    prodButtons->addStretch();
+
+    root->addLayout(prodButtons);
+    setCentralWidget(central);
+
+    connect(addProductBtn_, &QPushButton::clicked, this, &ProductWindow::onAddProduct);
+
+    setupCompleters();
+    resize(600, 400);
+    refreshProducts();
+}
+
+void ProductWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    refreshProducts();
+}
+
+void ProductWindow::refreshProducts() {
+    productTable_->setSortingEnabled(false);
+    const auto& p = productSvc_.all();
+    productTable_->clearContents();
+    productTable_->setRowCount((int)p.size());
+    int i = 0;
+    for (auto& kv : p) {
+        const Product& prod = kv.second;
+        std::string productKey = kv.first;
+        
+        auto* nameCell = new QTableWidgetItem(qs(prod.name));
+        nameCell->setTextAlignment(Qt::AlignCenter);
+        auto* priceCell = new NumericItem(prod.price, QString::number(prod.price, 'f', 2));
+        priceCell->setTextAlignment(Qt::AlignCenter);
+        auto* stockCell = new QTableWidgetItem(QString::number(prod.stock));
+        stockCell->setTextAlignment(Qt::AlignCenter);
+        
+        productTable_->setItem(i, 0, nameCell);
+        productTable_->setItem(i, 1, priceCell);
+        productTable_->setItem(i, 2, stockCell);
+        
+        auto* editBtn = new QPushButton("⚙️", this);
+        editBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #2196F3;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #1976D2;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #0D47A1;"
+            "}"
+        );
+        editBtn->setToolTip("Edit product");
+        editBtn->setFixedSize(35, 25);
+        connect(editBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onEditProduct(productKey, productName);
+        });
+        
+        auto* deleteBtn = new QPushButton("❌", this);
+        deleteBtn->setStyleSheet(
+            "QPushButton {"
+            "background-color: #F44336;"
+            "color: white;"
+            "border: none;"
+            "padding: 4px 8px;"
+            "border-radius: 4px;"
+            "font-size: 14px;"
+            "}"
+            "QPushButton:hover {"
+            "background-color: #D32F2F;"
+            "}"
+            "QPushButton:pressed {"
+            "background-color: #B71C1C;"
+            "}"
+        );
+        deleteBtn->setToolTip("Delete product");
+        deleteBtn->setFixedSize(35, 25);
+        connect(deleteBtn, &QPushButton::clicked, this, [this, productKey, productName = prod.name]() {
+            onDeleteProduct(productKey, productName);
+        });
+        
+        auto* editContainer = new QWidget(this);
+        auto* editLayout = new QHBoxLayout(editContainer);
+        editLayout->setContentsMargins(0, 0, 0, 0);
+        editLayout->addStretch();
+        editLayout->addWidget(editBtn);
+        editLayout->addStretch();
+        
+        auto* deleteContainer = new QWidget(this);
+        auto* deleteLayout = new QHBoxLayout(deleteContainer);
+        deleteLayout->setContentsMargins(0, 0, 0, 0);
+        deleteLayout->addStretch();
+        deleteLayout->addWidget(deleteBtn);
+        deleteLayout->addStretch();
+        
+        productTable_->setCellWidget(i, 3, editContainer);
+        productTable_->setCellWidget(i, 4, deleteContainer);
+        
+        ++i;
+    }
+    productTable_->setSortingEnabled(true);
+    
+    int totalWidth = productTable_->viewport()->width();
+    productTable_->setColumnWidth(0, totalWidth * 0.35);
+    productTable_->setColumnWidth(1, totalWidth * 0.20);
+    productTable_->setColumnWidth(2, totalWidth * 0.20);
+    productTable_->setColumnWidth(3, 50);
+    productTable_->setColumnWidth(4, 50);
+    
+    setupCompleters();
+}
+
+void ProductWindow::setupCompleters() {
+}
+
+void ProductWindow::onAddProduct() {
+    AddProductDialog dlg(productSvc_, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        std::string addedName = dlg.addedProductName();
+        if (!addedName.empty()) {
+            orderSvc_.setPrices(productSvc_.all());
+            std::string key = addedName;
+            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+            orderSvc_.recalculateOrdersWithProduct(key);
+            orderSvc_.save();
+            emit ordersChanged();
+        }
+        refreshProducts();
+    }
+}
+
+
+bool ProductWindow::isProductUsedInActiveOrders(const std::string& productKey, QList<int>& affectedOrderIds) {
+    affectedOrderIds.clear();
+    const auto& orders = orderSvc_.all();
+    for (const auto& order : orders) {
+        if (order.status == "new" || order.status == "in_progress") {
+            if (order.items.find(productKey) != order.items.end()) {
+                affectedOrderIds.append(order.id);
+            }
+        }
+    }
+    return !affectedOrderIds.isEmpty();
+}
+
+void ProductWindow::onDeleteProduct(const std::string& productKey, const std::string& productName) {
+    try {
+        QList<int> affectedOrderIds;
+        bool isUsed = isProductUsedInActiveOrders(productKey, affectedOrderIds);
+        
+        if (isUsed) {
+            QMessageBox msgBox(this);
+            msgBox.setWindowTitle("Delete Product");
+            msgBox.setIcon(QMessageBox::Warning);
+            msgBox.setText(QString("Product '%1' is used in %2 active order(s) (new or in_progress).")
+                          .arg(qs(productName))
+                          .arg(affectedOrderIds.size()));
+            msgBox.setInformativeText("What would you like to do?");
+            
+            QPushButton* cancelBtn = msgBox.addButton("Cancel", QMessageBox::RejectRole);
+            QPushButton* cancelOrdersBtn = msgBox.addButton("Cancel All Orders", QMessageBox::AcceptRole);
+            
+            msgBox.setDefaultButton(cancelBtn);
+            msgBox.exec();
+            
+            if (msgBox.clickedButton() == cancelBtn) {
+                return;
+            }
+            
+            orderSvc_.setProductService(&productSvc_);
+            
+            for (int orderId : affectedOrderIds) {
+                Order* order = orderSvc_.findById(orderId);
+                if (order) {
+                    try {
+                        std::string oldStatus = order->status;
+                        orderSvc_.setStatus(*order, "canceled");
+                        if (order->status != "canceled") {
+                            QMessageBox::warning(this, "error", QString("Failed to cancel order %1").arg(orderId));
+                        }
+                    } catch (const CustomException& e) {
+                        QMessageBox::warning(this, "error", QString("Failed to cancel order %1: %2")
+                                            .arg(orderId)
+                                            .arg(qs(e.what())));
+                    }
+                }
+            }
+            orderSvc_.save();
+            
+            emit ordersChanged();
+        }
+        
+        productSvc_.removeProduct(productName);
+        productSvc_.save();
+        orderSvc_.setPrices(productSvc_.all());
+        orderSvc_.save();
+        refreshProducts();
+        
+        if (isUsed) {
+            QMessageBox::information(this, "ok", QString("Product removed. %1 order(s) were canceled.")
+                                    .arg(affectedOrderIds.size()));
+        } else {
+            QMessageBox::information(this, "ok", "product removed");
+        }
+    } catch (const CustomException& e) { 
+        QMessageBox::warning(this, "error", qs(e.what())); 
+    }
+}
+
+void ProductWindow::onEditProduct(const std::string& productKey, const std::string& productName) {
+    const Product* product = productSvc_.findProduct(productName);
+    if (!product) {
+        QMessageBox::warning(this, "error", "product not found");
+        return;
+    }
+    
+    QDialog* editDialog = new QDialog(this);
+    editDialog->setWindowTitle("Edit Product");
+    editDialog->setModal(true);
+    
+    auto* layout = new QVBoxLayout(editDialog);
+    auto* form = new QFormLayout();
+    
+    QLineEdit* nameEdit = new QLineEdit(editDialog);
+    nameEdit->setText(qs(product->name));
+    form->addRow("Product name:", nameEdit);
+    
+    QLineEdit* priceEdit = new QLineEdit(editDialog);
+    priceEdit->setText(QString::number(product->price, 'f', 2));
+    form->addRow("Price:", priceEdit);
+    
+    QLineEdit* stockEdit = new QLineEdit(editDialog);
+    stockEdit->setText(QString::number(product->stock));
+    stockEdit->setValidator(new QIntValidator(0, 1000000000, editDialog));
+    form->addRow("Stock:", stockEdit);
+    
+    layout->addLayout(form);
+    
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, editDialog);
+    buttons->button(QDialogButtonBox::Ok)->setText("Save");
+    layout->addWidget(buttons);
+    
+    connect(buttons, &QDialogButtonBox::accepted, editDialog, [this, editDialog, nameEdit, priceEdit, stockEdit, productKey, oldName = productName]() {
+        try {
+            std::string newName = formatName(ss(nameEdit->text()));
+            if (newName.empty()) {
+                QMessageBox::warning(editDialog, "error", "Product name cannot be empty");
+                return;
+            }
+            
+            double oldPrice = 0.0;
+            const Product* oldProduct = productSvc_.findProduct(oldName);
+            if (oldProduct) {
+                oldPrice = oldProduct->price;
+            }
+            
+            double price = parsePrice(priceEdit->text());
+            bool ok = false;
+            int stock = stockEdit->text().toInt(&ok);
+            if (!ok || stock < 0) {
+                QMessageBox::warning(editDialog, "error", "Invalid stock value");
+                return;
+            }
+            
+            productSvc_.updateProduct(oldName, newName, price, stock);
+            productSvc_.save();
+            
+            orderSvc_.setPrices(productSvc_.all());
+            bool priceChanged = (oldProduct && std::abs(oldPrice - price) > 0.01);
+            bool nameChanged = (oldName != newName);
+            
+            if (priceChanged || nameChanged) {
+                if (nameChanged) {
+                    std::string oldKey = oldName;
+                    std::transform(oldKey.begin(), oldKey.end(), oldKey.begin(), ::tolower);
+                    orderSvc_.recalculateOrdersWithProduct(oldKey);
+                }
+                std::string newKey = newName;
+                std::transform(newKey.begin(), newKey.end(), newKey.begin(), ::tolower);
+                orderSvc_.recalculateOrdersWithProduct(newKey);
+            }
+            orderSvc_.save();
+            
+            refreshProducts();
+            if (priceChanged || nameChanged) {
+                emit ordersChanged();
+            }
+            
+            editDialog->accept();
+            QMessageBox::information(this, "ok", "product updated");
+        } catch (const CustomException& e) {
+            QMessageBox::warning(editDialog, "error", qs(e.what()));
+        }
+    });
+    
+    connect(buttons, &QDialogButtonBox::rejected, editDialog, &QDialog::reject);
+    
+    editDialog->resize(400, 150);
+    editDialog->exec();
+    delete editDialog;
+}
+
+====================
+src/ui/ReportDialog.cpp
+
+#include "include/ui/ReportDialog.h"
+#include <QVBoxLayout>
+#include <QFormLayout>
+
+ReportDialog::ReportDialog(bool filterActive, QWidget* parent)
+    : QDialog(parent) {
+    setWindowTitle("Create report");
+    auto* root = new QVBoxLayout(this);
+    auto* form = new QFormLayout();
+
+    nameEdit_ = new QLineEdit(this);
+    nameEdit_->setPlaceholderText("report name");
+    form->addRow("Report name:", nameEdit_);
+
+    scopeCombo_ = new QComboBox(this);
+    scopeCombo_->addItems({"Current filter","All orders"});
+    if (!filterActive) scopeCombo_->setCurrentIndex(1);
+    form->addRow("Scope:", scopeCombo_);
+
+    includeFilters_ = new QCheckBox("Include filters header", this);
+    includeFilters_->setChecked(true);
+    includeSummary_ = new QCheckBox("Include summary", this);
+    includeSummary_->setChecked(true);
+
+    root->addLayout(form);
+    root->addWidget(includeFilters_);
+    root->addWidget(includeSummary_);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+    root->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    resize(420, 180);
+}
+
+QString ReportDialog::reportName() const { return nameEdit_->text().trimmed(); }
+bool ReportDialog::scopeFiltered() const { return scopeCombo_->currentIndex() == 0; }
+bool ReportDialog::includeFiltersHeader() const { return includeFilters_->isChecked(); }
+bool ReportDialog::includeSummarySection() const { return includeSummary_->isChecked(); }
+
+====================
+src/ui/StatisticsWindow.cpp
+
+#include "include/ui/StatisticsWindow.h"
+#include "include/ui/UtilsQt.h"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QShowEvent>
+#include <QPaintEvent>
+#include <QPainter>
+#include <QPen>
+#include <QFont>
+#include <QFontMetrics>
+#include <QRect>
+#include <QColor>
+#include <QScrollArea>
+#include <QTimer>
+#include <QLinearGradient>
+#include <algorithm>
+#include <cmath>
+
+StatisticsWindow::StatisticsWindow(OrderService& svc, QWidget* parent)
+    : QMainWindow(parent), svc_(svc), animationProgress_(0.0) {
+    setWindowTitle("Statistics and Charts");
+    
+    auto* central = new QWidget(this);
+    auto* root = new QVBoxLayout(central);
+
+    updateStatistics();
+    
+    animationTimer_ = new QTimer(this);
+    connect(animationTimer_, &QTimer::timeout, this, &StatisticsWindow::onAnimationTick);
+
+    setCentralWidget(central);
+    setMinimumSize(800, 600);
+    resize(900, 700);
+}
+
+void StatisticsWindow::updateStatistics() {
+    stats_ = StatusStats();
+    const auto& all = svc_.all();
+    
+    for (const auto& o : all) {
+        if (o.status == "new") {
+            stats_.newCount++;
+            stats_.newRevenue += o.total;
+        } else if (o.status == "in_progress") {
+            stats_.inProgressCount++;
+            stats_.inProgressRevenue += o.total;
+        } else if (o.status == "done") {
+            stats_.doneCount++;
+            stats_.doneRevenue += o.total;
+        } else if (o.status == "canceled") {
+            stats_.canceledCount++;
+            stats_.canceledRevenue += o.total;
+        }
+    }
+}
+
+
+void StatisticsWindow::showEvent(QShowEvent* event) {
+    QMainWindow::showEvent(event);
+    refreshStatistics();
+    
+    animationProgress_ = 0.0;
+    animationTimer_->start(16);
+}
+
+void StatisticsWindow::refreshStatistics() {
+    updateStatistics();
+    update();
+}
+
+void StatisticsWindow::onAnimationTick() {
+    animationProgress_ += 0.05;
+    if (animationProgress_ >= 1.0) {
+        animationProgress_ = 1.0;
+        animationTimer_->stop();
+    }
+    update();
+}
+
+void StatisticsWindow::drawBarWithGradient(QPainter& painter, const QRect& rect, const QColor& baseColor, bool withShadow) {
+    if (rect.isEmpty()) return;
+    
+    if (withShadow) {
+        QRect shadowRect = rect.translated(3, 3);
+        QColor shadowColor(0, 0, 0, 60);
+        painter.fillRect(shadowRect, shadowColor);
+    }
+    
+    QLinearGradient gradient(rect.topLeft(), rect.bottomLeft());
+    QColor lightColor = baseColor.lighter(120);
+    QColor darkColor = baseColor.darker(110);
+    gradient.setColorAt(0.0, lightColor);
+    gradient.setColorAt(0.5, baseColor);
+    gradient.setColorAt(1.0, darkColor);
+    
+    painter.setBrush(gradient);
+    painter.setPen(QPen(baseColor.darker(150), 1));
+    
+    int radius = 5;
+    painter.drawRoundedRect(rect, radius, radius);
+    
+    QLinearGradient highlight(rect.topLeft(), QPoint(rect.left(), rect.top() + rect.height() / 3));
+    highlight.setColorAt(0.0, QColor(255, 255, 255, 100));
+    highlight.setColorAt(1.0, QColor(255, 255, 255, 0));
+    painter.setBrush(highlight);
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(QRect(rect.left(), rect.top(), rect.width(), rect.height() / 3), radius, radius);
+}
+
+void StatisticsWindow::paintEvent(QPaintEvent* event) {
+    QMainWindow::paintEvent(event);
+    
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    
+    int totalOrders = stats_.newCount + stats_.inProgressCount + stats_.doneCount + stats_.canceledCount;
+    if (totalOrders == 0) {
+        painter.setPen(QPen(Qt::white));
+        painter.setFont(QFont("Arial", 14, QFont::Normal));
+        painter.drawText(rect(), Qt::AlignCenter, "No orders to display");
+        return;
+    }
+    
+    int margin = 50;
+    int chartWidth = width() - 2 * margin;
+    int chartHeight = 220;
+    int chartY = 40;
+    
+    QColor newColor("#4CAF50");
+    QColor inProgressColor("#FFC107");
+    QColor doneColor("#2196F3");
+    QColor canceledColor("#F44336");
+    
+    int barWidth = (chartWidth - 60) / 4;
+    int maxCount = std::max({stats_.newCount, stats_.inProgressCount, stats_.doneCount, stats_.canceledCount, 1});
+    
+    int x = margin + 15;
+    int baseY = chartY + chartHeight;
+    
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    
+    auto drawAnimatedBar = [&](int count, const QColor& color, const QString& label) {
+        if (count < 0) return;
+        int targetHeight = maxCount > 0 ? (count * chartHeight) / maxCount : 0;
+        int animatedHeight = (int)(targetHeight * animationProgress_);
+        QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
+        
+        if (!barRect.isEmpty()) {
+            drawBarWithGradient(painter, barRect, color);
+        }
+        
+        painter.setPen(QPen(Qt::white));
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+        painter.drawText(QRect(x, baseY + 10, barWidth, 40), Qt::AlignCenter | Qt::TextWordWrap, label);
+        
+        if (animatedHeight > 25) {
+            painter.setPen(QPen(Qt::white));
+            painter.setFont(QFont("Arial", 10, QFont::Bold));
+            painter.drawText(barRect, Qt::AlignCenter, QString::number(count));
+        }
+    };
+    
+    drawAnimatedBar(stats_.newCount, newColor, QString("New\n%1").arg(stats_.newCount));
+    x += barWidth + 15;
+    
+    drawAnimatedBar(stats_.inProgressCount, inProgressColor, QString("In Progress\n%1").arg(stats_.inProgressCount));
+    x += barWidth + 15;
+    
+    drawAnimatedBar(stats_.doneCount, doneColor, QString("Done\n%1").arg(stats_.doneCount));
+    x += barWidth + 15;
+    
+    drawAnimatedBar(stats_.canceledCount, canceledColor, QString("Canceled\n%1").arg(stats_.canceledCount));
+    
+    int revenueChartY = chartY + chartHeight + 100;
+    double maxRevenue = std::max({stats_.newRevenue, stats_.inProgressRevenue, stats_.doneRevenue, stats_.canceledRevenue, 1.0});
+    
+    x = margin + 15;
+    baseY = revenueChartY + chartHeight;
+    
+    auto drawAnimatedRevenueBar = [&](double revenue, const QColor& color, const QString& statusName) {
+        if (revenue < 0) return;
+        int targetHeight = maxRevenue > 0 ? (int)((revenue * chartHeight) / maxRevenue) : 0;
+        int animatedHeight = (int)(targetHeight * animationProgress_);
+        QRect barRect(x, baseY - animatedHeight, barWidth, animatedHeight);
+        
+        if (!barRect.isEmpty()) {
+            drawBarWithGradient(painter, barRect, color);
+        }
+        
+        painter.setPen(QPen(Qt::white));
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+        painter.drawText(QRect(x, baseY + 10, barWidth, 30), Qt::AlignCenter, statusName);
+        
+        QString revenueText = "$" + QString::number(revenue, 'f', 2);
+        QFontMetrics fm(QFont("Arial", 9, QFont::Bold));
+        int textWidth = fm.horizontalAdvance(revenueText);
+        
+        painter.setPen(QPen(Qt::white));
+        painter.setFont(QFont("Arial", 9, QFont::Bold));
+        
+        if (animatedHeight > 30 && textWidth < barWidth - 4) {
+            painter.drawText(barRect, Qt::AlignCenter, revenueText);
+        } else {
+            int textY = baseY - animatedHeight - 5;
+            painter.drawText(QRect(x, textY - 15, barWidth, 15), Qt::AlignCenter, revenueText);
+        }
+    };
+    
+    drawAnimatedRevenueBar(stats_.newRevenue, newColor, "New");
+    x += barWidth + 15;
+    
+    drawAnimatedRevenueBar(stats_.inProgressRevenue, inProgressColor, "In Progress");
+    x += barWidth + 15;
+    
+    drawAnimatedRevenueBar(stats_.doneRevenue, doneColor, "Done");
+    x += barWidth + 15;
+    
+    drawAnimatedRevenueBar(stats_.canceledRevenue, canceledColor, "Canceled");
+    
+    painter.setFont(QFont("Arial", 16, QFont::Bold));
+    painter.setPen(QPen(Qt::white));
+    QRect titleRect1(margin, chartY - 40, chartWidth, 30);
+    painter.drawText(titleRect1, Qt::AlignLeft | Qt::AlignVCenter, "Orders by Status");
+    
+    QRect titleRect2(margin, revenueChartY - 40, chartWidth, 30);
+    painter.drawText(titleRect2, Qt::AlignLeft | Qt::AlignVCenter, "Revenue by Status");
+    
+    painter.setPen(QPen(Qt::white, 2));
+    painter.drawLine(margin, chartY - 10, margin + chartWidth, chartY - 10);
+    painter.drawLine(margin, revenueChartY - 10, margin + chartWidth, revenueChartY - 10);
+    
+    int legendY = revenueChartY + chartHeight + 80;
+    int legendX = margin + (chartWidth - 400) / 2;
+    int legendSpacing = 100;
+    
+    painter.setFont(QFont("Arial", 10, QFont::Bold));
+    painter.setPen(QPen(Qt::white));
+    
+    QRect legendRect1(legendX, legendY, 15, 15);
+    painter.fillRect(legendRect1, newColor);
+    painter.setPen(QPen(Qt::white, 1));
+    painter.drawRect(legendRect1);
+    painter.setPen(QPen(Qt::white));
+    painter.drawText(QRect(legendX + 20, legendY, 80, 15), Qt::AlignLeft | Qt::AlignVCenter, "New");
+    
+    QRect legendRect2(legendX + legendSpacing, legendY, 15, 15);
+    painter.fillRect(legendRect2, inProgressColor);
+    painter.setPen(QPen(Qt::white, 1));
+    painter.drawRect(legendRect2);
+    painter.setPen(QPen(Qt::white));
+    painter.drawText(QRect(legendX + legendSpacing + 20, legendY, 80, 15), Qt::AlignLeft | Qt::AlignVCenter, "In Progress");
+    
+    QRect legendRect3(legendX + 2 * legendSpacing, legendY, 15, 15);
+    painter.fillRect(legendRect3, doneColor);
+    painter.setPen(QPen(Qt::white, 1));
+    painter.drawRect(legendRect3);
+    painter.setPen(QPen(Qt::white));
+    painter.drawText(QRect(legendX + 2 * legendSpacing + 20, legendY, 80, 15), Qt::AlignLeft | Qt::AlignVCenter, "Done");
+    
+    QRect legendRect4(legendX + 3 * legendSpacing, legendY, 15, 15);
+    painter.fillRect(legendRect4, canceledColor);
+    painter.setPen(QPen(Qt::white, 1));
+    painter.drawRect(legendRect4);
+    painter.setPen(QPen(Qt::white));
+    painter.drawText(QRect(legendX + 3 * legendSpacing + 20, legendY, 80, 15), Qt::AlignLeft | Qt::AlignVCenter, "Canceled");
+}
+
+

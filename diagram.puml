@@ -1,0 +1,411 @@
+@startuml order-management-system
+scale 1
+left to right direction
+
+skinparam monochrome true
+skinparam shadowing false
+skinparam backgroundColor white
+skinparam defaultFontColor black
+
+skinparam ranksep 0.9
+skinparam nodesep 0.8
+skinparam linetype ortho
+
+hide empty members
+hide circle
+hide stereotype
+skinparam classAttributeIconSize 0
+skinparam classVisibilityIconSize 0
+
+skinparam arrow {
+    FontSize 30
+}
+
+' Увеличение размера наконечников стрелок
+skinparam arrowHeadSize 20
+skinparam arrowTailSize 20
+
+skinparam class {
+    AttributeFontSize 14
+    FontSize 14
+    Padding 6
+    BackgroundColor #dbdbdb
+    BorderColor black
+    ArrowColor black
+    BorderThickness 1
+}
+
+skinparam package {
+    BackgroundColor transparent
+    BorderColor transparent
+    FontColor transparent
+}
+
+skinparam defaultFontSize 18
+
+package "Core Entities" {
+    class Order {
+        + id : int
+        + client : std::string
+        + status : std::string
+        + items : std::map<std::string, int>
+        + total : double
+        + createdAt : std::string
+        --
+        + calcTotal(const std::map<std::string, double>&) : double
+        + operator<(const Order&) : bool
+        + operator==(const Order&) : bool
+        + toLine() : std::string
+        + fromLine(const std::string&) : std::optional<Order>
+    }
+
+    class Product {
+        + name : std::string
+        + price : double
+        + stock : int
+        --
+        + Product()
+        + Product(const std::string&, double, int)
+    }
+}
+
+package "Repository Layer" {
+    package "Interfaces" {
+        class IRepository {
+            + {abstract} ~IRepository()
+            + {abstract} save(const std::vector<Order>&) : void
+            + {abstract} load() : std::vector<Order>
+        }
+
+        class IProductRepository {
+            + {abstract} ~IProductRepository()
+            + {abstract} save(const std::map<std::string, double>&) : void
+            + {abstract} load() : std::map<std::string, double>
+        }
+    }
+
+    package "Implementations" {
+        class TxtOrderRepository {
+            - file_ : std::string
+            --
+            + TxtOrderRepository(std::string)
+            + save(const std::vector<Order>&) : void
+            + load() : std::vector<Order>
+        }
+
+        class TxtProductRepository {
+            - file_ : std::string
+            --
+            + TxtProductRepository(std::string)
+            + save(const std::map<std::string, double>&) : void
+            + load() : std::map<std::string, double>
+        }
+    }
+}
+
+package "Business Services" {
+    class OrderService {
+        - data_ : SimpleList_Order
+        - price_ : std::map<std::string, double>
+        - nextId_ : int
+        - repo_ : IRepository&
+        --
+        + OrderService(IRepository&)
+        + setPrices(std::map<std::string, double>) : void
+        + price() : const std::map<std::string, double>&
+        + create(const std::string&) : Order&
+        + addItem(Order&, const std::string&, int) : void
+        + removeItem(Order&, const std::string&) : void
+        + setStatus(Order&, const std::string&) : void
+        + findById(int) : Order*
+        + findById(int) const : const Order*
+        + sortById() : void
+        + revenue() : double
+        + save() : void
+        + load() : void
+        + all() : const SimpleList_Order&
+    }
+
+    class ProductService {
+        - products_ : std::map<std::string, double>
+        - repo_ : IProductRepository&
+        - V_ : ValidationService
+        --
+        + ProductService(IProductRepository&)
+        + all() : const std::map<std::string, double>&
+        + load() : void
+        + save() : void
+        + addProduct(const std::string&, double) : void
+        + removeProduct(const std::string&) : void
+        + updateProduct(const std::string&, const std::string&, double) : void
+    }
+
+    class ReportService {
+        --
+        + generateReport(const QList<const Order*>&, const QString&, bool, bool, bool, 
+        const ReportFilterInfo&, const OrderService&) : QString
+        + sanitizedBaseName(const QString&) : QString
+        + escapeCsvField(const QString&) : QString
+    }
+}
+
+package "Exceptions" {
+    class CustomException {
+        + CustomException(const std::string&)
+    }
+
+    class ValidationException {
+        + ValidationException(const std::string&)
+    }
+
+    class NotFoundException {
+        + NotFoundException(const std::string&)
+    }
+
+    class IoException {
+        + IoException(const std::string&)
+    }
+}
+
+package "Utilities" {
+    class ValidationService {
+        - re : std::regex
+        --
+        + validate_client_name(const std::string&) : void
+        + validate_item_name(const std::string&) : void
+        + validate_qty(int) : void
+        + validate_status(const std::string&) : void
+        + validate_id(int) : void
+        + validate_price(double) : void
+        + normalize_money(double) : double
+    }
+
+    class SimpleList_Order {
+        - data_ : Order*
+        - size_ : size_t
+        - capacity_ : size_t
+        --
+        + SimpleList_Order()
+        + ~SimpleList_Order()
+        + push_back(const Order&) : void
+        + size() : size_t
+        + operator[](size_t) : Order&
+        + operator[](size_t) const : const Order&
+        + begin() : Order*
+        + end() : Order*
+        + begin() const : const Order*
+        + end() const : const Order*
+        + clear() : void
+    }
+
+    class UtilsQt {
+        + qs(const std::string&) : QString
+        + ss(const QString&) : std::string
+    }
+}
+
+package "UI Layer" {
+    package "Dialogs" {
+        class AddOrderDialog {
+            - svc_ : OrderService&
+            - clientEdit_ : QLineEdit*
+            - buttons_ : QDialogButtonBox*
+            - createdId_ : int
+            --
+            + AddOrderDialog(OrderService&, QWidget*)
+            + createdOrderId() : int
+        }
+
+        class AddProductDialog {
+            - productSvc_ : ProductService&
+            - nameEdit_ : QLineEdit*
+            - priceEdit_ : QLineEdit*
+            - stockEdit_ : QLineEdit*
+            - buttons_ : QDialogButtonBox*
+            - addedProductName_ : std::string
+            --
+            + AddProductDialog(ProductService&, QWidget*)
+            + addedProductName() : std::string
+        }
+
+        class EditOrderDialog {
+            - svc_ : OrderService&
+            - productSvc_ : ProductService*
+            - orderId_ : int
+            - idEdit_ : QLineEdit*
+            - statusCombo_ : QComboBox*
+            - itemsTable_ : QTableWidget*
+            - addItemName_ : QLineEdit*
+            - addQty_ : QLineEdit*
+            - addItemBtn_ : QPushButton*
+            - addItemCompleter_ : QCompleter*
+            --
+            + EditOrderDialog(OrderService&, int, QWidget*)
+            + setProductService(ProductService*) : void
+        }
+
+        class FilterDialog {
+            - clientEdit_ : QLineEdit*
+            - statusCombo_ : QComboBox*
+            - minTotalEdit_ : QLineEdit*
+            - maxTotalEdit_ : QLineEdit*
+            - minIdEdit_ : QLineEdit*
+            - maxIdEdit_ : QLineEdit*
+            - fromDateEdit_ : QDateTimeEdit*
+            - toDateEdit_ : QDateTimeEdit*
+            - useFromCheck_ : QCheckBox*
+            - useToCheck_ : QCheckBox*
+            - buttons_ : QDialogButtonBox*
+            --
+            + FilterDialog(const QString&, const QString&, const QString&, const QString&, 
+            const QString&, const QString&, const QDateTime&, bool, const QDateTime&, bool, QWidget*)
+            + clientFilter() : QString
+            + statusFilter() : QString
+            + minTotalText() : QString
+            + maxTotalText() : QString
+            + minIdText() : QString
+            + maxIdText() : QString
+            + useFrom() : bool
+            + useTo() : bool
+            + fromDate() : QDateTime
+            + toDate() : QDateTime
+        }
+
+        class ReportDialog {
+            - nameEdit_ : QLineEdit*
+            - scopeCombo_ : QComboBox*
+            - includeFilters_ : QCheckBox*
+            - includeSummary_ : QCheckBox*
+            --
+            + ReportDialog(bool, QWidget*)
+            + reportName() : QString
+            + scopeFiltered() : bool
+            + includeFiltersHeader() : bool
+            + includeSummarySection() : bool
+        }
+    }
+
+    package "Windows" {
+        class MainWindow {
+            - svc_ : OrderService&
+            - productSvc_ : ProductService&
+            - V_ : ValidationService
+            - table_ : QTableWidget*
+            - productTable_ : QTableWidget*
+            - addOrderBtn_ : QPushButton*
+            - reportBtn_ : QPushButton*
+            - addProductBtn_ : QPushButton*
+            - clearFilterBtn_ : QPushButton*
+            - titleLabel_ : QLabel*
+            - openChartsBtn_ : QPushButton*
+            --
+            + MainWindow(OrderService&, ProductService&, QWidget*)
+            + refreshTable() : void
+            + refreshProducts() : void
+        }
+
+        class StatisticsWindow {
+            - svc_ : OrderService&
+            - animationTimer_ : QTimer*
+            - animationProgress_ : double
+            --
+            + StatisticsWindow(OrderService&, QWidget*)
+            + refreshStatistics() : void
+        }
+
+        class ProductWindow {
+            - productSvc_ : ProductService&
+            - orderSvc_ : OrderService&
+            - productTable_ : QTableWidget*
+            - addProductBtn_ : QPushButton*
+            - productNameCompleter_ : QCompleter*
+            --
+            + ProductWindow(ProductService&, OrderService&, QWidget*)
+            + refreshProducts() : void
+            + ordersChanged()
+        }
+    }
+
+    class NumericItem {
+        - v_ : double
+        --
+        + NumericItem(int, const QString&)
+        + NumericItem(double, const QString&)
+        + operator<(const QTableWidgetItem&) : bool
+    }
+}
+
+' Наследование
+ValidationException -up-|> CustomException
+NotFoundException -up-|> CustomException
+IoException -up-|> CustomException
+
+IRepository -up-|> TxtOrderRepository
+IProductRepository -up-|> TxtProductRepository
+
+' Композиция (сильная связь)
+OrderService *-- SimpleList_Order
+
+' Агрегация (слабая связь)
+OrderService o-- IRepository
+ProductService o-- IProductRepository
+OrderService o-- ValidationService
+ProductService o-- ValidationService
+
+' Основные связи между слоями
+OrderService --> Order
+ProductService --> Product
+OrderService --> ProductService
+
+' Связи UI с сервисами
+MainWindow --> OrderService
+MainWindow --> ProductService
+MainWindow --> ReportService
+AddOrderDialog --> OrderService
+EditOrderDialog --> OrderService
+EditOrderDialog --> ProductService
+AddProductDialog --> ProductService
+StatisticsWindow --> OrderService
+ProductWindow --> ProductService
+ProductWindow --> OrderService
+
+' Связи UI с диалогами
+MainWindow --> FilterDialog
+MainWindow --> AddOrderDialog
+MainWindow --> EditOrderDialog
+MainWindow --> ReportDialog
+
+' Связи отчетов
+ReportDialog --> ReportService
+ReportService --> OrderService
+ReportService --> Order
+
+' Утилиты
+MainWindow --> ValidationService
+MainWindow --> NumericItem
+MainWindow --> StatisticsWindow
+MainWindow --> ProductWindow
+
+' Зависимости (через исключения)
+OrderService ..> ValidationException
+OrderService ..> NotFoundException
+OrderService ..> IoException
+ProductService ..> ValidationException
+ProductService ..> NotFoundException
+ProductService ..> IoException
+TxtOrderRepository ..> IoException
+TxtProductRepository ..> IoException
+
+' Связи с UtilsQt
+MainWindow --> UtilsQt
+AddOrderDialog --> UtilsQt
+AddProductDialog --> UtilsQt
+EditOrderDialog --> UtilsQt
+FilterDialog --> UtilsQt
+ReportDialog --> UtilsQt
+NumericItem --> UtilsQt
+StatisticsWindow --> UtilsQt
+ProductWindow --> UtilsQt
+ReportService --> UtilsQt
+
+@enduml

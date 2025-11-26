@@ -1,0 +1,124 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+bin/
+lib/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Qt
+*.pro.user
+*.pro.user.*
+*.qmlc
+*.jsc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.autosave
+*.qm
+*.prl
+*.a
+*.la
+*.lo
+
+# Qt Creator
+*.creator
+*.creator.user
+*.creator.user.*
+*.includes
+*.config
+*.files
+*.cxxflags
+*.creator.shared
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+app
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# IDE - CLion
+.idea/
+cmake-build-*/
+
+# IDE - Visual Studio Code
+.vscode/
+*.code-workspace
+
+# IDE - Qt Creator
+*.pro.user
+*.pro.user.*
+
+# Database files (runtime data)
+# Exclude runtime directories and their contents
+db/
+reports/
+# Exclude runtime data files in db/ and reports/ directories
+db/*.txt
+reports/*.csv
+reports/*.txt
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testing
+Testing/
+test-results/
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# QXlsx build artifacts (if included as submodule)
+QXlsx/build/
+QXlsx/CMakeFiles/
