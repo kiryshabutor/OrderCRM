@@ -127,3 +127,10 @@ QXlsx/CMakeFiles/
 code_structure.txt
 new_code_structure.txt
 diagram.puml
+
+# Generated documentation files
+Code_Listing.docx
+generate_code_listing.py
+
+# Word documents (generated files)
+*.docx
