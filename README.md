@@ -77,4 +77,5 @@ make -j$(nproc)
 [Перейти к отчету SonarCloud](https://sonarcloud.io/project/overview?id=kiryshabutor_OrderCRM)
 
 ---
+
 Разработано в рамках курсового проекта студентом БГУИР.
