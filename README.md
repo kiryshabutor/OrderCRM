@@ -1,6 +1,6 @@
 # Order Management System (OrderMS)
 
-> Система управления заказами, разработанная с использованием **Qt6** и **C++23**.
+> Система управления заказами, разработанная с использованием **Qt6** и **C++20**.
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=kiryshabutor_OrderCRM&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=kiryshabutor_OrderCRM)
 [![C++](https://img.shields.io/badge/STD-C%2B%2B23-blue.svg)](https://isocpp.org/)
